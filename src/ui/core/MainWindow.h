@@ -199,6 +199,10 @@ private:
     // Toolbar Fill Brush toggle: on = activate the registered brush with the palette's
     // current tile (reverting the toggle when none is selected), off = back to Select.
     void applyFillBrushTool(bool checked);
+    // Unified Add/Remove Blocker toggle: on = activate whichever of the four registered
+    // blocker tools the dropdown currently has checked (Add/Remove x Wall/Scroll), off = back
+    // to Select. Updates the toolbar button text/icon to match. See setupToolModeActions.
+    void applyBlockerTool(bool checked);
     void syncToolModeActions(EditorMode mode);
     void setupDockWidgets();
 #ifdef GECK_SCRIPTING_ENABLED
@@ -314,6 +318,10 @@ private:
     // sub-mode. Toggling the button on activates the chosen sub-mode; off returns to Select.
     QAction* _exitGridsAction = nullptr;
     QAction* _fillBrushAction = nullptr;
+    // Unified Add/Remove Blocker tool: one checkable toolbar button plus a dropdown that picks
+    // which of the four registered blocker tools (Add/Remove x Wall/Scroll) the button activates.
+    QAction* _blockerAction = nullptr;
+    QMenu* _blockerMenu = nullptr;
     QMenu* _exitGridsMenu = nullptr;
     QAction* _exitGridPlaceHexAction = nullptr;   // "Place single hex" -> EditorMode::PlaceExitGrid
     QAction* _exitGridDrawRegionAction = nullptr; // "Draw edge"       -> EditorMode::MarkExits

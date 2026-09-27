@@ -190,6 +190,13 @@ public:
     // Load the freehand fill brush with the palette's tile and activate it. False when the brush is
     // unavailable or no tile is selected.
     bool activateFillBrush(int tileId, bool isRoof);
+    // Activate a registered Add/Remove Blocker tool: click (or drag) a hex to place/delete one
+    // blocker of that kind. Wall blockers are every movement-blocking object (the set the "Show
+    // Wall Blockers" overlay highlights); scroll blockers are the exact-pid camera-scroll markers.
+    bool activateAddWallBlockerTool();
+    bool activateRemoveWallBlockerTool();
+    bool activateAddScrollBlockerTool();
+    bool activateRemoveScrollBlockerTool();
     // The active registered tool's id ("" when none) — lets MainWindow tell tool-backed
     // PluginTool sessions apart when syncing toolbar toggle state.
     [[nodiscard]] std::string activeToolId() const;
@@ -470,6 +477,19 @@ private:
     void registerObjectPlacement(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void removePlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
     void addPlacedObject(const std::shared_ptr<MapObject>& mapObject, const std::shared_ptr<Object>& object);
+
+    // Add/Remove Blocker tool support (see AddBlockerTool::Host / RemoveBlockerTool::Host).
+    // "Wall" = every movement-blocking object (what "Show Wall Blockers" highlights); "scroll" =
+    // objects at the exact scroll-blocker pid. Placement skips a hex that already has one of that
+    // kind; removal deletes every match on the hex, undoably.
+    std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> wallBlockersAtHex(int hexIndex) const;
+    std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> scrollBlockersAtHex(int hexIndex) const;
+    void removeBlockers(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& blockers);
+    bool placeWallBlockerAtHex(int hexIndex);
+    bool placeScrollBlockerAtHex(int hexIndex);
+    // Shared activation path for the four Add/Remove Blocker tools: activates the registered tool
+    // by id and posts the status-bar message, or reverts on failure.
+    bool activateBlockerTool(std::string_view toolId, const QString& statusMessage);
 
     void setupUI();
     void initializeSelectionSystem();

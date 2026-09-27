@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
 namespace geck {
 
@@ -108,10 +109,14 @@ namespace FileFormat {
 
 // Wall Blocker constants
 namespace WallBlockers {
-    // Proto IDs for wall blockers (MISC type objects)
-    // These objects mark hexes as unwalkable for pathfinding
-    constexpr uint32_t NORMAL_WALL_BLOCKER_PID = 0x05000000 | 620;   ///< Proto 620 - Normal wall blocker
-    constexpr uint32_t SHOOT_THROUGH_BLOCKER_PID = 0x05000000 | 621; ///< Proto 621 - Shoot-through wall blocker
+    // The invisible, single-hex, movement-blocking marker real Fallout 2 maps place to seal
+    // footprints the visible art doesn't cover (car chassis, odd building corners) — the same
+    // object tools/car_blockers.py uses. SCENERY type, proto 67 ("Secret Blocking Hex"), reusing
+    // art/scenery/block.frm. Verified against base/master.dat: proto 620 (MISC), documented here
+    // previously as a "wall blocker", does not exist in any Fallout 2 data set, and the real
+    // engine's _obj_blocking_at() (fallout2-ce object.cc) only ever treats CRITTER/SCENERY/WALL
+    // FIDs as blocking — a MISC object could never have blocked movement even if 620 were real.
+    constexpr uint32_t SECRET_BLOCKING_HEX_PID = 0x02000000 | 67; ///< Proto 67 (scenery) - Secret Blocking Hex
 
     // Scroll blockers. The engine identifies them by this exact proto and never looks at the art:
     // _obj_scroll_blocking_at() tests `obj->pid == 0x500000C` (fallout2-ce object.cc), which
@@ -129,6 +134,16 @@ namespace WallBlockers {
 
     // Generic proto ID for simple objects
     constexpr uint32_t GENERIC_PROTO_ID = 24; ///< Proto 24 - Generic small object
+}
+
+// Registered-tool ids for the Add/Remove Blocker toolbar dropdown (AddBlockerTool /
+// RemoveBlockerTool instances registered in EditorWidget::registerNativeTools, compared
+// against ToolRegistry::activeToolId() in MainWindow to sync the dropdown/button state).
+namespace BlockerTools {
+    constexpr std::string_view ADD_WALL_ID = "native.add-wall-blocker";
+    constexpr std::string_view REMOVE_WALL_ID = "native.remove-wall-blocker";
+    constexpr std::string_view ADD_SCROLL_ID = "native.add-scroll-blocker";
+    constexpr std::string_view REMOVE_SCROLL_ID = "native.remove-scroll-blocker";
 }
 
 // Exit Grid constants

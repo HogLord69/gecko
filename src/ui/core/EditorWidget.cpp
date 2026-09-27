@@ -24,9 +24,12 @@
 #include "rendering/RenderingEngine.h"
 #include "ui/dragdrop/DragDropManager.h"
 #include "ui/tiles/TilePlacementManager.h"
+#include "editor/helper/ObjectQueries.h"
+#include "ui/tools/AddBlockerTool.h"
 #include "ui/tools/ExitGridPlacementManager.h"
 #include "ui/tools/FillBrushTool.h"
 #include "ui/tools/ITool.h"
+#include "ui/tools/RemoveBlockerTool.h"
 #include "ui/tools/ToolRegistry.h"
 #include "viewport/EdgeScroll.h"
 #include "viewport/ViewportController.h"
@@ -1123,6 +1126,45 @@ void EditorWidget::registerNativeTools() {
         .beginStroke = [this](const std::string& description) { _controller.commandController().beginBatch(description); },
         .endStroke = [this]() { _controller.commandController().endBatch(); },
     }));
+    // Wall blockers: deletes/places the movement-blocking objects on whatever hex the cursor is
+    // over (the same set the "Show Wall Blockers" overlay highlights); a drag covers every hex
+    // it crosses. Removal reuses the same undoable delete path as regular selection deletion.
+    _toolRegistry->registerTool(std::make_unique<RemoveBlockerTool>(RemoveBlockerTool::Host{
+        .blockersAtHex = [this](int hexIndex) { return wallBlockersAtHex(hexIndex); },
+        .removeObjects = [this](const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& blockers) { removeBlockers(blockers); },
+        .beginStroke = [this](const std::string& description) { _controller.commandController().beginBatch(description); },
+        .endStroke = [this]() { _controller.commandController().endBatch(); },
+        .id = BlockerTools::REMOVE_WALL_ID,
+        .hint = "Click: remove wall blocker on this hex\nDrag: clear a path\nEsc / right-click: done",
+        .strokeDescription = "Remove Wall Blocker",
+    }));
+    _toolRegistry->registerTool(std::make_unique<AddBlockerTool>(AddBlockerTool::Host{
+        .placeBlockerAtHex = [this](int hexIndex) { return placeWallBlockerAtHex(hexIndex); },
+        .beginStroke = [this](const std::string& description) { _controller.commandController().beginBatch(description); },
+        .endStroke = [this]() { _controller.commandController().endBatch(); },
+        .id = BlockerTools::ADD_WALL_ID,
+        .hint = "Click: place wall blocker\nDrag: stamp a path\nEsc / right-click: done",
+        .strokeDescription = "Add Wall Blocker",
+    }));
+    // Scroll blockers: the exact-pid camera-scroll markers (WallBlockers::SCROLL_BLOCKER_PID),
+    // a completely different set from wall blockers — see scrollBlockersAtHex/placeScrollBlockerAtHex.
+    _toolRegistry->registerTool(std::make_unique<RemoveBlockerTool>(RemoveBlockerTool::Host{
+        .blockersAtHex = [this](int hexIndex) { return scrollBlockersAtHex(hexIndex); },
+        .removeObjects = [this](const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& blockers) { removeBlockers(blockers); },
+        .beginStroke = [this](const std::string& description) { _controller.commandController().beginBatch(description); },
+        .endStroke = [this]() { _controller.commandController().endBatch(); },
+        .id = BlockerTools::REMOVE_SCROLL_ID,
+        .hint = "Click: remove scroll blocker on this hex\nDrag: clear a path\nEsc / right-click: done",
+        .strokeDescription = "Remove Scroll Blocker",
+    }));
+    _toolRegistry->registerTool(std::make_unique<AddBlockerTool>(AddBlockerTool::Host{
+        .placeBlockerAtHex = [this](int hexIndex) { return placeScrollBlockerAtHex(hexIndex); },
+        .beginStroke = [this](const std::string& description) { _controller.commandController().beginBatch(description); },
+        .endStroke = [this]() { _controller.commandController().endBatch(); },
+        .id = BlockerTools::ADD_SCROLL_ID,
+        .hint = "Click: place scroll blocker\nDrag: stamp a path\nEsc / right-click: done",
+        .strokeDescription = "Add Scroll Blocker",
+    }));
     _toolRegistry->registerTool(std::make_unique<ObjectPlacementTool>(
         [this](sf::Vector2f worldPos) {
             placeObjectAtPosition(worldPos);
@@ -1170,6 +1212,34 @@ bool EditorWidget::activateFillBrush(int tileId, bool isRoof) {
     }
     Q_EMIT statusMessageRequested("Fill brush — hold left and drag to paint, Esc or right-click to stop");
     return true;
+}
+
+bool EditorWidget::activateBlockerTool(std::string_view toolId, const QString& statusMessage) {
+    if (!activateRegisteredTool(toolId)) {
+        return false;
+    }
+    Q_EMIT statusMessageRequested(statusMessage);
+    return true;
+}
+
+bool EditorWidget::activateAddWallBlockerTool() {
+    return activateBlockerTool(BlockerTools::ADD_WALL_ID,
+        "Add wall blocker — click a hex to place one, drag to stamp a path, Esc or right-click to stop");
+}
+
+bool EditorWidget::activateRemoveWallBlockerTool() {
+    return activateBlockerTool(BlockerTools::REMOVE_WALL_ID,
+        "Remove wall blocker — click a hex to clear it, drag to clear a path, Esc or right-click to stop");
+}
+
+bool EditorWidget::activateAddScrollBlockerTool() {
+    return activateBlockerTool(BlockerTools::ADD_SCROLL_ID,
+        "Add scroll blocker — click a hex to place one, drag to stamp a path, Esc or right-click to stop");
+}
+
+bool EditorWidget::activateRemoveScrollBlockerTool() {
+    return activateBlockerTool(BlockerTools::REMOVE_SCROLL_ID,
+        "Remove scroll blocker — click a hex to clear it, drag to clear a path, Esc or right-click to stop");
 }
 
 ToolMouseEvent EditorWidget::buildToolMouseEvent(sf::Vector2f worldPos, std::optional<sf::Mouse::Button> button) const {
@@ -3079,6 +3149,183 @@ void EditorWidget::deleteSelectedObjects() {
     Q_EMIT selectionChanged(_session.selectionManager()->getCurrentSelection(), _session.currentElevation());
 
     spdlog::debug("EditorWidget::deleteSelectedObjects - Successfully deleted {} objects", removedObjects.size());
+}
+
+std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> EditorWidget::wallBlockersAtHex(int hexIndex) const {
+    std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> found;
+    if (hexIndex < 0 || !_session.map()) {
+        return found;
+    }
+
+    // _session.objects() holds the current elevation's visual objects; isWallBlocker() is the
+    // same movement-blocking check the "Show Wall Blockers" overlay renders from, so this tool
+    // only ever removes what that overlay highlighted.
+    for (const auto& object : _session.objects()) {
+        if (!object || !object->hasMapObject()) {
+            continue;
+        }
+        MapObject& mapObj = object->getMapObject();
+        if (mapObj.position != hexIndex) {
+            continue;
+        }
+        if (!object_query::isWallBlocker(mapObj, _resources)) {
+            continue;
+        }
+        if (auto mapObjPtr = object->getMapObjectPtr()) {
+            found.emplace_back(mapObjPtr, object);
+        }
+    }
+    return found;
+}
+
+std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> EditorWidget::scrollBlockersAtHex(int hexIndex) const {
+    std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>> found;
+    if (hexIndex < 0 || !_session.map()) {
+        return found;
+    }
+
+    // Scroll blockers are identified by the engine purely by exact pid (see
+    // WallBlockers::SCROLL_BLOCKER_PID's own doc comment) — unrelated to blocksMovement, so this
+    // is a completely different check from wallBlockersAtHex.
+    for (const auto& object : _session.objects()) {
+        if (!object || !object->hasMapObject()) {
+            continue;
+        }
+        MapObject& mapObj = object->getMapObject();
+        if (mapObj.position != hexIndex || mapObj.pro_pid != WallBlockers::SCROLL_BLOCKER_PID) {
+            continue;
+        }
+        if (auto mapObjPtr = object->getMapObjectPtr()) {
+            found.emplace_back(mapObjPtr, object);
+        }
+    }
+    return found;
+}
+
+void EditorWidget::removeBlockers(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& blockers) {
+    if (blockers.empty()) {
+        return;
+    }
+
+    // registerObjectDeletion expects the caller to have already removed the objects (see
+    // deleteSelectedObjects above) — it only records the undo/redo command.
+    for (const auto& [mapObj, object] : blockers) {
+        removePlacedObject(mapObj, object);
+    }
+    _controller.commandController().registerObjectDeletion(blockers);
+}
+
+bool EditorWidget::placeWallBlockerAtHex(int hexIndex) {
+    if (!_session.map() || !_session.hexgrid().containsPosition(hexIndex)) {
+        return false;
+    }
+
+    // Don't stack a marker on a hex that already blocks movement — whether that's an earlier
+    // marker or real wall/scenery art. Same query the overlay and RemoveBlockerTool use.
+    if (!wallBlockersAtHex(hexIndex).empty()) {
+        return false;
+    }
+
+    const uint32_t proPid = WallBlockers::SECRET_BLOCKING_HEX_PID;
+
+    Pro* pro = nullptr;
+    try {
+        pro = _resources.loadPro(proPid);
+    } catch (const std::exception& e) {
+        spdlog::warn("EditorWidget::placeWallBlockerAtHex - failed to load PRO {}: {}", proPid, e.what());
+        return false;
+    }
+    if (!pro) {
+        spdlog::warn("EditorWidget::placeWallBlockerAtHex - no PRO data for pid {}", proPid);
+        return false;
+    }
+
+    auto mapObject = std::make_shared<MapObject>();
+    mapObject->position = hexIndex;
+    mapObject->elevation = _session.currentElevation();
+    mapObject->direction = 0;
+    mapObject->frame_number = 0;
+    mapObject->pro_pid = proPid;
+    mapObject->frm_pid = static_cast<uint32_t>(pro->header.FID);
+    mapObject->x = 0;
+    mapObject->y = 0;
+    mapObject->sx = 0;
+    mapObject->sy = 0;
+    mapObject->flags = 0;
+    mapObject->critter_index = -1;
+    mapObject->light_radius = 0;
+    mapObject->light_intensity = 0;
+    mapObject->outline_color = 0;
+    mapObject->map_scripts_pid = -1;
+    mapObject->script_id = -1;
+    mapObject->objects_in_inventory = 0;
+    mapObject->max_inventory_size = 0;
+    mapObject->amount = 1;
+    mapObject->unknown10 = 0;
+    mapObject->unknown11 = 0;
+
+    try {
+        std::string frmPath = _resources.frmResolver().resolve(mapObject->frm_pid);
+        auto frm = _resources.repository().find<Frm>(frmPath);
+        if (!frm) {
+            frm = _resources.repository().load<Frm>(frmPath);
+        }
+
+        auto object = std::make_shared<Object>(frm);
+        object->setMapObject(mapObject);
+        if (frm) {
+            sf::Sprite sprite{ _resources.textures().get(frmPath) };
+            object->setSprite(std::move(sprite));
+            object->setDirection(static_cast<ObjectDirection>(mapObject->direction));
+        }
+        if (auto hex = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexIndex)); hex.has_value()) {
+            object->setHexPosition(hex->get());
+        }
+
+        registerObjectPlacement(mapObject, object);
+        return true;
+    } catch (const std::exception& e) {
+        spdlog::warn("EditorWidget::placeWallBlockerAtHex - failed to create visual object at hex {}: {}", hexIndex, e.what());
+        return false;
+    }
+}
+
+bool EditorWidget::placeScrollBlockerAtHex(int hexIndex) {
+    if (!_session.map() || !_session.hexgrid().containsPosition(hexIndex)) {
+        return false;
+    }
+
+    // Don't stack a second scroll blocker on a hex that already has one.
+    if (!scrollBlockersAtHex(hexIndex).empty()) {
+        return false;
+    }
+
+    auto mapObject = createScrollBlockerObject(hexIndex);
+
+    try {
+        std::string frmPath = _resources.frmResolver().resolve(mapObject->frm_pid);
+        auto frm = _resources.repository().find<Frm>(frmPath);
+        if (!frm) {
+            frm = _resources.repository().load<Frm>(frmPath);
+        }
+
+        auto object = std::make_shared<Object>(frm);
+        object->setMapObject(mapObject);
+        if (frm) {
+            sf::Sprite sprite{ _resources.textures().get(frmPath) };
+            object->setSprite(std::move(sprite));
+            object->setDirection(static_cast<ObjectDirection>(mapObject->direction));
+        }
+        if (auto hex = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hexIndex)); hex.has_value()) {
+            object->setHexPosition(hex->get());
+        }
+
+        registerObjectPlacement(mapObject, object);
+        return true;
+    } catch (const std::exception& e) {
+        spdlog::warn("EditorWidget::placeScrollBlockerAtHex - failed to create visual object at hex {}: {}", hexIndex, e.what());
+        return false;
+    }
 }
 
 } // namespace geck

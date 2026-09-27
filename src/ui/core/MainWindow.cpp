@@ -25,6 +25,7 @@
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
 #include "ui/tools/FillBrushTool.h"
+#include "util/Constants.h"
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/dialogs/AboutDialog.h"
 #include "ui/dialogs/FillDialog.h"
@@ -81,6 +82,28 @@
 #include <spdlog/spdlog.h>
 
 namespace geck {
+
+namespace {
+    // The four operations the unified Add/Remove Blocker toolbar dropdown offers, shared by
+    // setupToolModeActions (builds the menu), applyBlockerTool (activates the chosen one) and
+    // syncToolModeActions (mirrors the active tool back into the button/menu state).
+    struct BlockerOp {
+        QString label;
+        QString icon;
+        std::string_view toolId;
+        bool checkedByDefault;
+    };
+
+    const std::array<BlockerOp, 4>& blockerOps() {
+        static const std::array<BlockerOp, 4> ops{ {
+            { "Add Wall Blocker", ":/icons/actions/add-wall-blocker.svg", BlockerTools::ADD_WALL_ID, true },
+            { "Remove Wall Blocker", ":/icons/actions/remove-wall-blocker.svg", BlockerTools::REMOVE_WALL_ID, false },
+            { "Add Scroll Blocker", ":/icons/actions/add-wall-blocker.svg", BlockerTools::ADD_SCROLL_ID, false },
+            { "Remove Scroll Blocker", ":/icons/actions/remove-wall-blocker.svg", BlockerTools::REMOVE_SCROLL_ID, false },
+        } };
+        return ops;
+    }
+} // namespace
 
 MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::shared_ptr<Settings> settings, QWidget* parent)
     : QMainWindow(parent)
@@ -923,6 +946,41 @@ void MainWindow::setupToolModeActions() {
     connect(_fillBrushAction, &QAction::triggered, this, [this](bool checked) {
         applyFillBrushTool(checked);
     });
+
+    // Unified Add/Remove Blocker tool: one checkable button plus a dropdown choosing which of
+    // the four registered blocker tools it activates, mirroring the Exit-Grids button above.
+    _blockerAction = _mainToolBar->addAction(createIcon(":/icons/actions/add-wall-blocker.svg"), "Add Wall Blocker");
+    _blockerAction->setStatusTip("Click or drag over hexes to place/remove blockers (one stroke is one undo step)");
+    _blockerAction->setCheckable(true);
+
+    _blockerMenu = new QMenu(this);
+    for (const BlockerOp& op : blockerOps()) {
+        QAction* action = _blockerMenu->addAction(createIcon(op.icon), op.label);
+        action->setCheckable(true);
+        action->setChecked(op.checkedByDefault);
+        action->setData(QString::fromUtf8(op.toolId.data(), static_cast<int>(op.toolId.size())));
+        connect(action, &QAction::triggered, this, [this]() {
+            // Exclusive: tick the chosen op, untick the others, and (re)activate the tool —
+            // live-switching kind if the button is already on, same as Exit-Grids sub-modes.
+            auto* chosen = qobject_cast<QAction*>(sender());
+            for (QAction* item : _blockerMenu->actions()) {
+                const QSignalBlocker block(item);
+                item->setChecked(item == chosen);
+            }
+            const QSignalBlocker buttonBlock(_blockerAction);
+            _blockerAction->setChecked(true);
+            applyBlockerTool(true);
+        });
+    }
+
+    _blockerAction->setMenu(_blockerMenu);
+    if (auto* toolButton = qobject_cast<QToolButton*>(_mainToolBar->widgetForAction(_blockerAction))) {
+        toolButton->setPopupMode(QToolButton::MenuButtonPopup);
+    }
+
+    connect(_blockerAction, &QAction::triggered, this, [this](bool checked) {
+        applyBlockerTool(checked);
+    });
 }
 
 void MainWindow::applyFillBrushTool(bool checked) {
@@ -942,6 +1000,52 @@ void MainWindow::applyFillBrushTool(bool checked) {
         return;
     }
     updateModeDisplay("Mode: Fill brush", ":/icons/actions/paint.svg");
+}
+
+void MainWindow::applyBlockerTool(bool checked) {
+    if (!_currentEditorWidget) {
+        return;
+    }
+    if (!checked) {
+        _currentEditorWidget->setMode(EditorMode::Select);
+        return;
+    }
+
+    // Find the checked menu item; default to the first op if none is checked yet (first-ever
+    // activation before the user has touched the dropdown).
+    const BlockerOp* chosen = &blockerOps().front();
+    for (QAction* item : _blockerMenu->actions()) {
+        if (item->isChecked()) {
+            const std::string toolId = item->data().toString().toStdString();
+            for (const BlockerOp& op : blockerOps()) {
+                if (op.toolId == toolId) {
+                    chosen = &op;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    bool activated = false;
+    if (chosen->toolId == BlockerTools::ADD_WALL_ID) {
+        activated = _currentEditorWidget->activateAddWallBlockerTool();
+    } else if (chosen->toolId == BlockerTools::REMOVE_WALL_ID) {
+        activated = _currentEditorWidget->activateRemoveWallBlockerTool();
+    } else if (chosen->toolId == BlockerTools::ADD_SCROLL_ID) {
+        activated = _currentEditorWidget->activateAddScrollBlockerTool();
+    } else if (chosen->toolId == BlockerTools::REMOVE_SCROLL_ID) {
+        activated = _currentEditorWidget->activateRemoveScrollBlockerTool();
+    }
+
+    if (!activated) {
+        const QSignalBlocker blocker(_blockerAction);
+        _blockerAction->setChecked(false);
+        return;
+    }
+    _blockerAction->setText(chosen->label);
+    _blockerAction->setIcon(createIcon(chosen->icon));
+    updateModeDisplay("Mode: " + chosen->label, chosen->icon);
 }
 
 void MainWindow::applyExitGridsTool(bool checked) {
@@ -979,6 +1083,31 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
         const QSignalBlocker blocker(_fillBrushAction);
         _fillBrushAction->setChecked(mode == EditorMode::PluginTool && _currentEditorWidget
             && _currentEditorWidget->activeToolId() == FillBrushTool::ID);
+    }
+    // The unified Blocker button is checked while any of its four tools is active; the dropdown
+    // shows which one, and the button label/icon track it — same pattern as Exit-Grids below.
+    if (_blockerAction) {
+        const std::string activeId = (mode == EditorMode::PluginTool && _currentEditorWidget)
+            ? _currentEditorWidget->activeToolId()
+            : std::string();
+        const BlockerOp* active = nullptr;
+        for (const BlockerOp& op : blockerOps()) {
+            if (op.toolId == activeId) {
+                active = &op;
+                break;
+            }
+        }
+
+        const QSignalBlocker blocker(_blockerAction);
+        _blockerAction->setChecked(active != nullptr);
+        if (active) {
+            _blockerAction->setText(active->label);
+            _blockerAction->setIcon(createIcon(active->icon));
+            for (QAction* item : _blockerMenu->actions()) {
+                const QSignalBlocker itemBlocker(item);
+                item->setChecked(item->data().toString().toStdString() == active->toolId);
+            }
+        }
     }
 
     // Unified Exit-Grids button is checked while in either sub-mode; the dropdown shows which one,
