@@ -83,7 +83,7 @@ endif()
 # no scripting or game data. test_frm_inspect covers the FRM tools' non-GL logic (FID parse/decode,
 # art-name resolution, glob listing) against a temp LST fixture.
 if(TARGET gecko_cli)
-    target_sources(general_tests PRIVATE general/test_pattern_stamp.cpp general/test_map_reachability.cpp general/test_map_analyzer_scripts.cpp general/test_map_analyzer_adjacency.cpp general/test_map_dump_grid.cpp general/test_map_graph.cpp general/test_frm_inspect.cpp general/test_resource_inspect.cpp)
+    target_sources(general_tests PRIVATE general/test_pattern_stamp.cpp general/test_map_reachability.cpp general/test_map_analyzer_scripts.cpp general/test_map_analyzer_adjacency.cpp general/test_map_dump_grid.cpp general/test_map_graph.cpp general/test_frm_inspect.cpp general/test_resource_inspect.cpp general/test_proto_export.cpp)
     target_link_libraries(general_tests PRIVATE gecko_cli)
 endif()
 
@@ -107,6 +107,8 @@ add_executable(qt_tests
     # GameLauncher is an app-layer Qt class, so its ddraw.ini test links gecko::app.
     qt/test_ddraw_ini.cpp
     qt/test_game_launcher.cpp
+    # Preferences: a macOS .app fixes the game root, so the data-directory field follows it.
+    qt/test_game_location_widget.cpp
     qt/test_palette_model.cpp
     qt/test_object_palette_indexing.cpp
     # PatternSerializer is the editor's Qt (QByteArray/QString) serializer.

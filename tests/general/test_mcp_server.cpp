@@ -36,7 +36,7 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             names.push_back(tool["name"].get<std::string>());
             CHECK(tool.contains("inputSchema"));
         }
-        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "find_script", "find_text", "reachability", "describe_map", "map_graph", "world_map", "world_encounters", "quests", "gvars", "endings", "find_gvar", "generate", "render_map", "extract_pattern", "script_api", "frm_info", "resolve_fid", "list_frms", "render_frm", "resource_find", "resource_list", "resource_missing" }) {
+        for (const char* expected : { "list_maps", "analyze", "palette", "proto_info", "describe_script", "find_script", "find_text", "export_entities", "export_protos", "reachability", "describe_map", "map_graph", "world_map", "world_encounters", "quests", "gvars", "endings", "find_gvar", "generate", "render_map", "extract_pattern", "script_api", "frm_info", "resolve_fid", "list_frms", "render_frm", "resource_find", "resource_list", "resource_missing" }) {
             CHECK(std::find(names.begin(), names.end(), expected) != names.end());
         }
     }
@@ -79,6 +79,34 @@ TEST_CASE("McpServer speaks JSON-RPC and exposes the tools", "[mcp]") {
             CHECK(resp["result"]["isError"] == true);
             const auto text = resp["result"]["content"][0]["text"].get<std::string>();
             CHECK(text.find("1-based") != std::string::npos);
+        }
+    }
+
+    // Scenery and walls are ~98% of every map's object records and nobody searches for a wall, so the
+    // export omits them unless asked. With no data mounted the call still has to answer cleanly.
+    SECTION("export_entities reports missing data rather than failing oddly") {
+        const json resp = server.handleMessage({ { "jsonrpc", "2.0" }, { "id", 8 }, { "method", "tools/call" },
+            { "params", { { "name", "export_entities" }, { "arguments", json::object() } } } });
+        CHECK(resp["result"]["isError"] == true);
+        const auto text = resp["result"]["content"][0]["text"].get<std::string>();
+        CHECK(text.find("no maps") != std::string::npos);
+    }
+
+    SECTION("export_protos reports missing data and rejects filters it cannot honour") {
+        auto call = [&](json toolArgs, int id) {
+            return server.handleMessage({ { "jsonrpc", "2.0" }, { "id", id }, { "method", "tools/call" },
+                { "params", { { "name", "export_protos" }, { "arguments", std::move(toolArgs) } } } });
+        };
+        const json noData = call(json::object(), 60);
+        CHECK(noData["result"]["isError"] == true);
+        CHECK(noData["result"]["content"][0]["text"].get<std::string>().find("items.lst") != std::string::npos);
+
+        for (json bad : { json{ { "kind", "robot" } }, json{ { "itemType", "gun" } },
+                 json{ { "kind", "critter" }, { "itemType", "weapon" } }, json{ { "kind", 5 } } }) {
+            const json resp = call(bad, 61);
+            CHECK(resp["result"]["isError"] == true);
+            // A rejected filter never reaches the data: the message is about the argument.
+            CHECK(resp["result"]["content"][0]["text"].get<std::string>().find("items.lst") == std::string::npos);
         }
     }
 
