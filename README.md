@@ -6,6 +6,17 @@
 
 ![Screenshot](https://github.com/JanSimek/geck-map-editor/blob/master/screenshot.jpg "Screenshot")
 
+## This fork (HogLord69)
+
+This branch (`hoglord-edits`) adds, on top of upstream gecko:
+
+- **Fallout 1 support.** Point gecko at a Fallout 1 install and open its maps: the DAT1 archives (`MASTER.DAT`, `CRITTER.DAT`, with their LZSS packing) and version-19 maps, including their one-word ladders, are read and saved.
+- **Nested inventories** (a bag inside a critter's pack) load instead of failing the map.
+- **Stamps** in [`resources/stamps`](resources/stamps): buildings, graveyards, junkyards and ruins cut from Fallout 1, Fallout 2, Sonora, Nevada, Resurrection and Olympus, with credits.
+- Add/Remove Blocker tools, `gecko-cli map strip-exit-grids`, no crash on missing art, single instance, sturdier settings.
+
+Windows builds are on the [releases page](https://github.com/HogLord69/gecko/releases).
+
 ## Building from source
 
 Some dependencies are bundled as git submodules, so clone with `--recursive` — or, if you already cloned, fetch them with `git submodule update --init --recursive`.
