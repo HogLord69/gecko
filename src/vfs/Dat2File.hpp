@@ -135,7 +135,9 @@ private:
             }
         }
 
-        if (m_datEntry->getCompressed()) {
+        if (m_datEntry->getLzss()) {
+            DatReader::unpackLzss(packed.data(), packed.size(), m_Data.data(), m_Data.size());
+        } else if (m_datEntry->getCompressed()) {
             // zlib inflate the DAT entry into m_Data, with checked returns: a
             // corrupt or truncated archive entry is a real error, not silent
             // success with garbage/partial data.

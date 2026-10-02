@@ -97,6 +97,13 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
             switch (static_cast<Pro::SCENERY_TYPE>(subtype_id)) {
                 case Pro::SCENERY_TYPE::LADDER_TOP:
                 case Pro::SCENERY_TYPE::LADDER_BOTTOM:
+                    if (_mapVersion == 19) {
+                        // Fallout 1: the destination tile+elevation only; the ladder
+                        // always leads somewhere on the same map.
+                        object->map = 0;
+                        object->elevhex = read_be_u32();
+                        break;
+                    }
                     object->map = read_be_u32();
                     object->elevhex = read_be_u32();
                     // hex = elevhex & 0xFFFF;
@@ -150,22 +157,38 @@ std::unique_ptr<MapObject> MapReader::readMapObject() {
     return object;
 }
 
+// An object's inventory: each entry is its stack count, then the item, which can
+// carry an inventory of its own (a bag in a pack). The engine reads it the same
+// way, recursively; reading one level only loses the stream on a nested bag.
+void MapReader::readInventory(MapObject& object) {
+    if (object.objects_in_inventory == 0) {
+        return;
+    }
+    object.inventory.reserve(object.objects_in_inventory);
+    for (size_t i = 0; i < object.objects_in_inventory; ++i) {
+        uint32_t amount = read_be_u32();
+        std::unique_ptr<MapObject> subobject = readMapObject();
+        subobject->amount = amount;
+        readInventory(*subobject);
+        object.inventory.push_back(std::move(subobject));
+    }
+}
+
 // TODO: split
 std::unique_ptr<Map> MapReader::read() {
 
     auto map = std::make_unique<Map>(_path);
     auto map_file = std::make_unique<Map::MapFile>();
 
-    // 19 or 20
+    // 19 (Fallout 1) or 20 (Fallout 2). The layout is the same apart from
+    // ladders, which carry one word in version 19 (fallout2-ce proto.cc
+    // objectDataRead reads both).
     auto version = read_be_u32();
 
-    if (version == 19) {
-        throw std::runtime_error{ "Fallout 1 maps are not supported yet" };
-    }
-
-    if (version != 20) {
+    if (version != 19 && version != 20) {
         throw std::runtime_error{ "Unknown map version " + std::to_string(version) };
     }
+    _mapVersion = version;
 
     map_file->header.version = version;
 
@@ -324,19 +347,7 @@ std::unique_ptr<Map> MapReader::read() {
         for (size_t j = 0; j != objectsOnElevation; ++j) {
 
             std::unique_ptr<MapObject> object = readMapObject();
-
-            if (object->objects_in_inventory > 0) {
-
-                object->inventory.reserve(object->objects_in_inventory);
-
-                for (size_t i = 0; i < object->objects_in_inventory; ++i) {
-                    uint32_t amount = read_be_u32();
-                    std::unique_ptr<MapObject> subobject = readMapObject();
-                    subobject->amount = amount;
-
-                    object->inventory.push_back(std::move(subobject));
-                }
-            }
+            readInventory(*object);
             map_file->map_objects[elev].push_back(std::move(object));
         }
 

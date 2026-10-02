@@ -552,7 +552,7 @@ bool Settings::validateDataPath(const std::filesystem::path& path) const {
         return true;
     }
 
-    if (normalizedPath.extension() == ".dat" && std::filesystem::is_regular_file(normalizedPath, ec)) {
+    if (util::hasDatExtension(normalizedPath) && std::filesystem::is_regular_file(normalizedPath, ec)) {
         return true;
     }
 
@@ -560,7 +560,7 @@ bool Settings::validateDataPath(const std::filesystem::path& path) const {
 }
 
 std::filesystem::path Settings::normalizeDataPath(const std::filesystem::path& path) {
-    if (path.extension() == ".dat") {
+    if (util::hasDatExtension(path)) {
         return path;
     }
     return util::resolveGameDataRoot(path).value_or(path);

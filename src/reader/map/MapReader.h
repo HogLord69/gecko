@@ -19,9 +19,12 @@ public:
 
 private:
     std::unique_ptr<MapObject> readMapObject();
+    void readInventory(MapObject& object);
     MapScript::ScriptType fromPid(uint32_t val);
 
     std::function<Pro*(uint32_t PID)> _proLoadCallback;
+    // 19 = Fallout 1, 20 = Fallout 2. Ladders differ between them.
+    uint32_t _mapVersion = 20;
 
 public:
     std::unique_ptr<Map> read() override;

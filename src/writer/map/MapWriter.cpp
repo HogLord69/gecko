@@ -40,6 +40,7 @@ bool MapWriter::write(const Map::MapFile& map) {
 
         auto& utils = getBinaryUtils();
         spdlog::info("Saving map {} version {}", map.header.filename, map.header.version);
+        _mapVersion = map.header.version;
 
         // Write map header
         utils.writeWithLog(map.header.version, "map version");
@@ -280,6 +281,10 @@ void MapWriter::writeObject(const MapObject& object) {
             switch (static_cast<Pro::SCENERY_TYPE>(subtype_id)) {
                 case Pro::SCENERY_TYPE::LADDER_TOP:
                 case Pro::SCENERY_TYPE::LADDER_BOTTOM:
+                    if (_mapVersion == 19) {
+                        utils.writeBE32(object.elevhex); // Fallout 1: destination only
+                        break;
+                    }
                     utils.writeBE32(object.map);
                     utils.writeBE32(object.elevhex);
                     break;
