@@ -24,6 +24,7 @@
 #endif
 #include "ui/tiles/TilePlacementManager.h"
 #include "ui/tools/ExitGridPlacementManager.h"
+#include "ui/tools/BlackEdgeTool.h"
 #include "ui/tools/FillBrushTool.h"
 #include "util/Constants.h"
 #include "ui/dialogs/SettingsDialog.h"
@@ -515,6 +516,22 @@ void MainWindow::setupMenuBar() {
     _fillSelectionAction = addMenuAction(_editMenu, ":/icons/actions/paint.svg", "&Fill Selection...", &MainWindow::showFillDialog, QKeySequence(), "Fill the selected area with a Luau fill script");
 #endif
 
+    // Draw order, also on the viewport's right-click menu. The keys are handled by InputHandler while
+    // the viewport has focus, not as window shortcuts, so palette lists keep Home/End/PgUp/PgDown;
+    // the text after the tab only shows them in the menu.
+    _editMenu->addSeparator();
+    const auto addReorderAction = [this, &addMenuAction](const QString& text, object_order::Step step, const QString& statusTip) {
+        addMenuAction(_editMenu, QString(), text, [this, step]() {
+            if (_currentEditorWidget) {
+                _currentEditorWidget->reorderSelectedObjects(step);
+            }
+        }, QKeySequence(), statusTip);
+    };
+    addReorderAction("Bring to &Front\tHome", object_order::Step::BringToFront, "Draw the selected objects over everything else");
+    addReorderAction("Bring F&orward\tPgUp", object_order::Step::BringForward, "Draw the selected objects over the next object they overlap");
+    addReorderAction("Send &Backward\tPgDown", object_order::Step::SendBackward, "Draw the selected objects under the next object they overlap");
+    addReorderAction("Send to Bac&k\tEnd", object_order::Step::SendToBack, "Draw the selected objects under everything else");
+
     _editMenu->addSeparator();
 
     _undoAction = _editMenu->addAction("&Undo");
@@ -981,6 +998,26 @@ void MainWindow::setupToolModeActions() {
     connect(_blockerAction, &QAction::triggered, this, [this](bool checked) {
         applyBlockerTool(checked);
     });
+
+    // Black edge: draw Fallout 2's black edge wall pieces as a line, like the exit grids' Draw edge.
+    _blackEdgeAction = _mainToolBar->addAction(createIcon(":/icons/actions/black-edge.svg"), "Black Edge");
+    _blackEdgeAction->setStatusTip("Click corners to line the map edge with black wall pieces (one line is one undo step)");
+    _blackEdgeAction->setCheckable(true);
+    connect(_blackEdgeAction, &QAction::triggered, this, [this](bool checked) {
+        if (!_currentEditorWidget) {
+            return;
+        }
+        if (!checked) {
+            _currentEditorWidget->setMode(EditorMode::Select);
+            return;
+        }
+        if (!_currentEditorWidget->activateBlackEdgeTool()) {
+            const QSignalBlocker blocker(_blackEdgeAction);
+            _blackEdgeAction->setChecked(false);
+            return;
+        }
+        updateModeDisplay("Mode: Black edge", ":/icons/actions/black-edge.svg");
+    });
 }
 
 void MainWindow::applyFillBrushTool(bool checked) {
@@ -1083,6 +1120,11 @@ void MainWindow::syncToolModeActions(EditorMode mode) {
         const QSignalBlocker blocker(_fillBrushAction);
         _fillBrushAction->setChecked(mode == EditorMode::PluginTool && _currentEditorWidget
             && _currentEditorWidget->activeToolId() == FillBrushTool::ID);
+    }
+    if (_blackEdgeAction) {
+        const QSignalBlocker blocker(_blackEdgeAction);
+        _blackEdgeAction->setChecked(mode == EditorMode::PluginTool && _currentEditorWidget
+            && _currentEditorWidget->activeToolId() == BlackEdgeTool::ID);
     }
     // The unified Blocker button is checked while any of its four tools is active; the dropdown
     // shows which one, and the button label/icon track it — same pattern as Exit-Grids below.
@@ -2758,7 +2800,7 @@ void MainWindow::showSavePatternDialog() {
     }
 
     const QString path = QFileDialog::getSaveFileName(
-        this, "Save Selection as Pattern", pattern::PatternLibrary::rootDir(), "Gecko Pattern (*.json)");
+        this, "Save Selection as Pattern", pattern::PatternLibrary::customDir(), "Gecko Pattern (*.json)");
     if (path.isEmpty()) {
         return;
     }

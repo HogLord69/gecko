@@ -7,6 +7,7 @@
 #include <functional>
 #include <vector>
 #include <spdlog/spdlog.h>
+#include "editor/helper/ObjectOrder.h"
 #include "ui/core/EditorMode.h"
 #include "util/Types.h"
 
@@ -91,6 +92,12 @@ public:
 
         // Hover
         std::function<void(sf::Vector2f worldPos)> onMouseMove;
+
+        // A right-click that didn't drag (a drag pans). `screenPos` is the cursor in widget pixels,
+        // where the host opens its context menu.
+        std::function<void(sf::Vector2f worldPos, sf::Vector2i screenPos)> onContextMenu;
+        // Home / PgUp / PgDown / End: draw-order steps for the selected objects.
+        std::function<void(object_order::Step step)> onReorderObjects;
 
         // Keyboard
         std::function<void()> onEscape;
@@ -201,6 +208,9 @@ private:
     sf::Vector2f _mouseLastWorldPos;
     sf::Vector2f _dragStartWorldPos;
     bool _isDragging = false;
+    // Set once a right-button press moves past the drag threshold: the release then ends a pan
+    // instead of opening the context menu.
+    bool _panMoved = false;
     bool _immediateSelectionPerformed = false;
     SelectionModifier _dragSelectionModifier = SelectionModifier::NONE; // modifier held when a drag-select began
 

@@ -91,6 +91,12 @@ public:
     bool registerObjectDeletion(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& removedObjects);
     bool registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
     bool registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
+    /// Undoable change of an elevation's object order, which is gecko's draw order (see
+    /// object_order in editor/helper/ObjectOrder.h). `after` must hold the same objects as `before`.
+    bool registerObjectReorder(int elevation,
+        const std::vector<std::shared_ptr<MapObject>>& before,
+        const std::vector<std::shared_ptr<MapObject>>& after,
+        const std::string& description);
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
     bool registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath);
     bool registerExitGridCreation(const std::vector<std::shared_ptr<MapObject>>& exitGrids, int elevation);

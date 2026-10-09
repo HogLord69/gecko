@@ -322,6 +322,8 @@ private:
     // which of the four registered blocker tools (Add/Remove x Wall/Scroll) the button activates.
     QAction* _blockerAction = nullptr;
     QMenu* _blockerMenu = nullptr;
+    // Black edge line tool (BlackEdgeTool): checked while it is the active registered tool.
+    QAction* _blackEdgeAction = nullptr;
     QMenu* _exitGridsMenu = nullptr;
     QAction* _exitGridPlaceHexAction = nullptr;   // "Place single hex" -> EditorMode::PlaceExitGrid
     QAction* _exitGridDrawRegionAction = nullptr; // "Draw edge"       -> EditorMode::MarkExits

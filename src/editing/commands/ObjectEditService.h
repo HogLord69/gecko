@@ -79,6 +79,12 @@ public:
     bool registerObjectDeletion(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& removedObjects);
     bool registerObjectMove(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<std::pair<int, int>>& moves);
     bool registerObjectRotation(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& beforeDirs, const std::vector<int>& afterDirs);
+    /// Applies `after` as the elevation's object order (its draw order) and records it for undo.
+    /// Returns false, recording nothing, when the order is unchanged.
+    bool registerObjectReorder(int elevation,
+        const std::vector<std::shared_ptr<MapObject>>& before,
+        const std::vector<std::shared_ptr<MapObject>>& after,
+        const std::string& description);
 
     void applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath);
     bool registerObjectFrmChange(const std::shared_ptr<Object>& object, uint32_t oldFrmPid, const std::string& oldFrmPath, uint32_t newFrmPid, const std::string& newFrmPath);
@@ -101,6 +107,9 @@ private:
     // undo and redo halves of registerObjectMove / registerObjectRotation.
     void applyObjectPositions(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& positions);
     static void applyObjectDirections(const std::vector<std::shared_ptr<Object>>& objects, const std::vector<int>& directions);
+    // Sets an elevation's object order and re-sorts the drawn objects to match, keeping the same
+    // Object instances so the selection survives (a full refreshObjects() would rebuild them).
+    void applyObjectOrder(int elevation, const std::vector<std::shared_ptr<MapObject>>& order);
     // Applies one exit-grid state snapshot to an object (shared by the undo/redo halves).
     static void applyExitGridState(MapObject& exitGrid, const ExitGridCommandState& state);
 

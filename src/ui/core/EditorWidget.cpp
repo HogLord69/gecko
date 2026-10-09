@@ -8,10 +8,12 @@
 #include "pattern/PatternLibrary.h"
 #include "pattern/PatternSerializer.h"
 #include "scripting/MapScriptApi.h"
+#include <QAction>
 #include <QCursor>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QMenu>
 #include <QPoint>
 #include <QSize>
 #include <QStringList>
@@ -21,11 +23,13 @@
 #include "util/BuiltTile.h"
 #include "rendering/MapEdgeOverlayGeometry.h"
 #include "rendering/MapSpriteLoader.h"
+#include "rendering/ObjectVisibility.h"
 #include "rendering/RenderingEngine.h"
 #include "ui/dragdrop/DragDropManager.h"
 #include "ui/tiles/TilePlacementManager.h"
 #include "editor/helper/ObjectQueries.h"
 #include "ui/tools/AddBlockerTool.h"
+#include "ui/tools/BlackEdgeTool.h"
 #include "ui/tools/ExitGridPlacementManager.h"
 #include "ui/tools/FillBrushTool.h"
 #include "ui/tools/ITool.h"
@@ -1165,6 +1169,20 @@ void EditorWidget::registerNativeTools() {
         .hint = "Click: place scroll blocker\nDrag: stamp a path\nEsc / right-click: done",
         .strokeDescription = "Add Scroll Blocker",
     }));
+    _toolRegistry->registerTool(std::make_unique<BlackEdgeTool>(BlackEdgeTool::Host{
+        .grid = &_session.hexgrid(),
+        .shapes = [this]() { return blackEdgeShapes(); },
+        .floorCenter = [this]() { return floorCenter(); },
+        .frmPidFor = [this](uint32_t proPid) -> uint32_t {
+            try {
+                const Pro* pro = _resources.loadPro(proPid);
+                return pro ? static_cast<uint32_t>(pro->header.FID) : 0;
+            } catch (const std::exception&) {
+                return 0;
+            }
+        },
+        .placePieces = [this](const std::vector<black_edge::Placement>& pieces) { return placeBlackEdgePieces(pieces); },
+    }));
     _toolRegistry->registerTool(std::make_unique<ObjectPlacementTool>(
         [this](sf::Vector2f worldPos) {
             placeObjectAtPosition(worldPos);
@@ -1240,6 +1258,11 @@ bool EditorWidget::activateAddScrollBlockerTool() {
 bool EditorWidget::activateRemoveScrollBlockerTool() {
     return activateBlockerTool(BlockerTools::REMOVE_SCROLL_ID,
         "Remove scroll blocker — click a hex to clear it, drag to clear a path, Esc or right-click to stop");
+}
+
+bool EditorWidget::activateBlackEdgeTool() {
+    return activateBlockerTool(BlackEdgeTool::ID,
+        "Black edge — click to start, click each corner, then click the last point again, press Enter or right-click to place");
 }
 
 ToolMouseEvent EditorWidget::buildToolMouseEvent(sf::Vector2f worldPos, std::optional<sf::Mouse::Button> button) const {
@@ -1559,6 +1582,13 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
             return;
         }
         deleteSelectedObjects();
+    };
+
+    callbacks.onContextMenu = [this](sf::Vector2f worldPos, sf::Vector2i screenPos) {
+        showObjectContextMenu(worldPos, screenPos);
+    };
+    callbacks.onReorderObjects = [this](object_order::Step step) {
+        reorderSelectedObjects(step);
     };
 
     callbacks.onMarkExitsModeCancelled = [this]() {
@@ -1881,6 +1911,149 @@ void EditorWidget::rotateSelectedObject() {
     } else {
         spdlog::debug("No objects selected for rotation");
     }
+}
+
+namespace {
+    // Whether a sprite draws an opaque pixel at a world position (same mapping as ObjectPicker).
+    bool spriteOpaqueAt(const sf::Sprite& sprite, const sf::Image& image, sf::Vector2f worldPos) {
+        const auto bounds = sprite.getGlobalBounds();
+        const auto rect = sprite.getTextureRect();
+        const auto scale = sprite.getScale();
+        const int x = static_cast<int>((worldPos.x - bounds.position.x) / scale.x);
+        const int y = static_cast<int>((worldPos.y - bounds.position.y) / scale.y);
+        if (x < 0 || y < 0 || x >= rect.size.x || y >= rect.size.y) {
+            return false;
+        }
+        const auto texX = static_cast<unsigned int>(x + rect.position.x);
+        const auto texY = static_cast<unsigned int>(y + rect.position.y);
+        if (texX >= image.getSize().x || texY >= image.getSize().y) {
+            return false;
+        }
+        return image.getPixel({ texX, texY }).a > 0;
+    }
+
+    // Whether two drawn sprites cover a common pixel, so swapping their order changes the picture.
+    // Each texture is read back from the GPU once per command and kept in `images`.
+    bool spritesOverlap(const sf::Sprite& a, const sf::Sprite& b,
+        std::unordered_map<const sf::Texture*, sf::Image>& images) {
+        const auto overlap = a.getGlobalBounds().findIntersection(b.getGlobalBounds());
+        if (!overlap) {
+            return false;
+        }
+        const auto imageOf = [&images](const sf::Sprite& sprite) -> const sf::Image& {
+            const sf::Texture* texture = &sprite.getTexture();
+            auto it = images.find(texture);
+            if (it == images.end()) {
+                it = images.emplace(texture, texture->copyToImage()).first;
+            }
+            return it->second;
+        };
+        const sf::Image& imageA = imageOf(a);
+        const sf::Image& imageB = imageOf(b);
+        const float right = overlap->position.x + overlap->size.x;
+        const float bottom = overlap->position.y + overlap->size.y;
+        for (float y = overlap->position.y + 0.5f; y < bottom; y += 1.f) {
+            for (float x = overlap->position.x + 0.5f; x < right; x += 1.f) {
+                if (spriteOpaqueAt(a, imageA, { x, y }) && spriteOpaqueAt(b, imageB, { x, y })) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    const char* reorderDescription(object_order::Step step) {
+        switch (step) {
+            case object_order::Step::BringToFront:
+                return "Bring to Front";
+            case object_order::Step::BringForward:
+                return "Bring Forward";
+            case object_order::Step::SendBackward:
+                return "Send Backward";
+            case object_order::Step::SendToBack:
+                return "Send to Back";
+        }
+        return "Reorder Objects";
+    }
+} // namespace
+
+void EditorWidget::reorderSelectedObjects(object_order::Step step) {
+    auto* selectionManager = _session.selectionManager();
+    if (!_session.map() || !selectionManager) {
+        return;
+    }
+
+    std::vector<std::shared_ptr<MapObject>> selected;
+    for (const auto& object : selectionManager->getCurrentSelection().getObjects()) {
+        if (object && object->hasMapObject()) {
+            selected.push_back(object->getMapObjectPtr());
+        }
+    }
+    if (selected.empty()) {
+        Q_EMIT statusMessageRequested("Select an object to change its draw order");
+        return;
+    }
+
+    // Only objects drawn right now can be hopped over: moving past a hidden one changes nothing
+    // you can see, so Forward/Backward would look like it did nothing.
+    std::unordered_map<const MapObject*, const sf::Sprite*> drawn;
+    for (const auto& object : _session.objects()) {
+        if (object && object->hasMapObject() && isObjectVisible(object->getMapObject(), _session.visibility())) {
+            drawn.emplace(object->getMapObjectPtr().get(), &object->getSprite());
+        }
+    }
+    std::unordered_map<const sf::Texture*, sf::Image> images;
+    const auto overlaps = [&drawn, &images](const MapObject& a, const MapObject& b) {
+        const auto spriteA = drawn.find(&a);
+        const auto spriteB = drawn.find(&b);
+        return spriteA != drawn.end() && spriteB != drawn.end()
+            && spritesOverlap(*spriteA->second, *spriteB->second, images);
+    };
+
+    const int elevation = _session.currentElevation();
+    const auto before = getMapFile().map_objects[elevation];
+    const auto after = object_order::reordered(before, selected, step, overlaps);
+    const char* description = reorderDescription(step);
+    if (!_controller.commandController().registerObjectReorder(elevation, before, after, description)) {
+        Q_EMIT statusMessageRequested(QString("%1: already there").arg(description));
+        return;
+    }
+    Q_EMIT statusMessageRequested(QString("%1: %2 object(s)").arg(description).arg(selected.size()));
+}
+
+void EditorWidget::showObjectContextMenu(sf::Vector2f worldPos, sf::Vector2i screenPos) {
+    auto* selectionManager = _session.selectionManager();
+    if (!_session.map() || !selectionManager || !_sfmlWidget) {
+        return;
+    }
+
+    // Like most editors: right-clicking an object outside the selection selects just that object;
+    // right-clicking one inside it keeps the whole selection, so a group can be reordered at once.
+    const auto underCursor = getObjectsAtPosition(worldPos);
+    const auto& selection = selectionManager->getCurrentSelection();
+    const auto isSelected = [&selection](const std::shared_ptr<Object>& object) {
+        return std::ranges::any_of(selection.items, [&object](const selection::SelectedItem& item) {
+            return item.isObject() && item.getObject() == object;
+        });
+    };
+    if (!underCursor.empty() && !isSelected(underCursor.front())) {
+        selectionManager->setSelectedItems({ selection::SelectedItem{ selection::SelectionType::OBJECT, underCursor.front() } });
+    }
+    if (selectionManager->getCurrentSelection().getObjects().empty()) {
+        return; // nothing under the cursor and nothing selected: no menu
+    }
+
+    // The text after each tab is the viewport key for the same command (see InputHandler).
+    QMenu menu(this);
+    const auto addStep = [this, &menu](const QString& text, object_order::Step step) {
+        QAction* action = menu.addAction(text);
+        connect(action, &QAction::triggered, this, [this, step]() { reorderSelectedObjects(step); });
+    };
+    addStep("Bring to &Front\tHome", object_order::Step::BringToFront);
+    addStep("Bring F&orward\tPgUp", object_order::Step::BringForward);
+    addStep("Send &Backward\tPgDown", object_order::Step::SendBackward);
+    addStep("Send to Bac&k\tEnd", object_order::Step::SendToBack);
+    menu.exec(_sfmlWidget->mapToGlobal(QPoint(screenPos.x, screenPos.y)));
 }
 
 void EditorWidget::changeElevation(int elevation) {
@@ -3226,17 +3399,114 @@ bool EditorWidget::placeWallBlockerAtHex(int hexIndex) {
         return false;
     }
 
-    const uint32_t proPid = WallBlockers::SECRET_BLOCKING_HEX_PID;
+    return placeProtoAtHex(hexIndex, WallBlockers::SECRET_BLOCKING_HEX_PID);
+}
 
+int EditorWidget::placeBlackEdgePieces(const std::vector<black_edge::Placement>& pieces) {
+    if (!_session.map() || pieces.empty()) {
+        return 0;
+    }
+
+    ScopedUndoBatch batch(_controller.commandController(), "Draw Black Edge");
+    int placed = 0;
+    for (const auto& piece : pieces) {
+        // Drawing over an earlier frame must not stack a second copy of the same piece.
+        const bool alreadyThere = std::ranges::any_of(_session.objects(), [&piece](const auto& object) {
+            return object && object->hasMapObject() && object->getMapObject().position == piece.hex
+                && object->getMapObject().pro_pid == piece.pid;
+        });
+        if (!alreadyThere && _session.hexgrid().containsPosition(piece.hex) && placeProtoAtHex(piece.hex, piece.pid)) {
+            ++placed;
+        }
+    }
+    Q_EMIT statusMessageRequested(QString("Black edge: %1 piece(s) placed").arg(placed));
+    return placed;
+}
+
+std::optional<black_edge::Shapes> EditorWidget::blackEdgeShapes() {
+    if (_blackEdgeShapes) {
+        return _blackEdgeShapes;
+    }
+    const auto shapeOf = [this](uint32_t proPid) -> std::optional<black_edge::PieceShape> {
+        try {
+            const Pro* pro = _resources.loadPro(proPid);
+            if (!pro) {
+                return std::nullopt;
+            }
+            const std::string frmPath = _resources.frmResolver().resolve(static_cast<uint32_t>(pro->header.FID));
+            const Frm* frm = _resources.repository().find<Frm>(frmPath);
+            if (!frm) {
+                frm = _resources.repository().load<Frm>(frmPath);
+            }
+            if (!frm || frm->directions().empty() || frm->directions().at(0).frames().empty()) {
+                return std::nullopt;
+            }
+            const auto& direction = frm->directions().at(0);
+            return black_edge::PieceShape{
+                .width = direction.frames().at(0).width(),
+                .height = direction.frames().at(0).height(),
+                .shiftX = direction.shiftX(),
+                .shiftY = direction.shiftY(),
+            };
+        } catch (const std::exception& e) {
+            spdlog::warn("EditorWidget::blackEdgeShapes - can't load the art for proto {:#010x}: {}", proPid, e.what());
+            return std::nullopt;
+        }
+    };
+    const auto row = shapeOf(black_edge::ROW_PID);
+    const auto column = shapeOf(black_edge::COLUMN_PID);
+    if (!row || !column) {
+        Q_EMIT statusMessageRequested("Black edge: the BLACK002/BLACK003 scenery art isn't in the loaded data");
+        return std::nullopt;
+    }
+    _blackEdgeShapes = black_edge::Shapes{ .row = *row, .column = *column };
+    return _blackEdgeShapes;
+}
+
+sf::Vector2f EditorWidget::floorCenter() const {
+    // The middle of the current elevation's floor, from the drawn floor tiles; the grid's middle
+    // when the elevation has no floor.
+    const auto* map = _session.map();
+    const auto& sprites = _session.floorSprites();
+    if (map) {
+        const auto tiles = map->getMapFile().tiles.find(_session.currentElevation());
+        if (tiles != map->getMapFile().tiles.end()) {
+            float minX = std::numeric_limits<float>::max();
+            float minY = std::numeric_limits<float>::max();
+            float maxX = std::numeric_limits<float>::lowest();
+            float maxY = std::numeric_limits<float>::lowest();
+            for (std::size_t i = 0; i < tiles->second.size() && i < sprites.size(); ++i) {
+                if (tiles->second[i].getFloor() <= 1) {
+                    continue; // empty, or the blank placeholder tile
+                }
+                const auto bounds = sprites[i].getGlobalBounds();
+                minX = std::min(minX, bounds.position.x);
+                minY = std::min(minY, bounds.position.y);
+                maxX = std::max(maxX, bounds.position.x + bounds.size.x);
+                maxY = std::max(maxY, bounds.position.y + bounds.size.y);
+            }
+            if (minX <= maxX) {
+                return { (minX + maxX) / 2.f, (minY + maxY) / 2.f };
+            }
+        }
+    }
+    const int middle = (HexagonGrid::GRID_HEIGHT / 2) * HexagonGrid::GRID_WIDTH + HexagonGrid::GRID_WIDTH / 2;
+    if (const auto hex = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(middle))) {
+        return { static_cast<float>(hex->get().x()), static_cast<float>(hex->get().y()) };
+    }
+    return {};
+}
+
+bool EditorWidget::placeProtoAtHex(int hexIndex, uint32_t proPid) {
     Pro* pro = nullptr;
     try {
         pro = _resources.loadPro(proPid);
     } catch (const std::exception& e) {
-        spdlog::warn("EditorWidget::placeWallBlockerAtHex - failed to load PRO {}: {}", proPid, e.what());
+        spdlog::warn("EditorWidget::placeProtoAtHex - failed to load PRO {}: {}", proPid, e.what());
         return false;
     }
     if (!pro) {
-        spdlog::warn("EditorWidget::placeWallBlockerAtHex - no PRO data for pid {}", proPid);
+        spdlog::warn("EditorWidget::placeProtoAtHex - no PRO data for pid {}", proPid);
         return false;
     }
 
@@ -3285,7 +3555,7 @@ bool EditorWidget::placeWallBlockerAtHex(int hexIndex) {
         registerObjectPlacement(mapObject, object);
         return true;
     } catch (const std::exception& e) {
-        spdlog::warn("EditorWidget::placeWallBlockerAtHex - failed to create visual object at hex {}: {}", hexIndex, e.what());
+        spdlog::warn("EditorWidget::placeProtoAtHex - failed to create visual object at hex {}: {}", hexIndex, e.what());
         return false;
     }
 }

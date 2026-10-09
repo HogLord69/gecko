@@ -547,6 +547,10 @@ add_library(gecko_core STATIC
     editor/Hex.cpp
     editor/helper/ObjectQueries.h
     editor/helper/ObjectQueries.cpp
+    editor/helper/ObjectOrder.h
+    editor/helper/ObjectOrder.cpp
+    editor/helper/BlackEdge.h
+    editor/helper/BlackEdge.cpp
     editor/worldmap/WorldMapScene.h
     editor/worldmap/WorldMapScene.cpp
 )

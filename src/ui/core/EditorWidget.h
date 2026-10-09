@@ -17,6 +17,8 @@
 #include <QVBoxLayout>
 #include "editor/Object.h"
 #include "editor/HexagonGrid.h"
+#include "editor/helper/BlackEdge.h"
+#include "editor/helper/ObjectOrder.h"
 #include "util/Types.h"
 #include "format/map/Map.h"
 #include "format/pro/Pro.h"
@@ -153,6 +155,9 @@ public:
     void setActiveSelectionLayers(SelectionLayers layers);
     SelectionLayers getActiveSelectionLayers() const;
     void rotateSelectedObject();
+    // Bring the selected objects forward/backward in gecko's draw order (undoable). In game the
+    // order only matters between objects on the same hex; see editor/helper/ObjectOrder.h.
+    void reorderSelectedObjects(object_order::Step step);
     void changeElevation(int elevation);
     void toggleScrollBlockerRectangleMode();
 
@@ -197,6 +202,9 @@ public:
     bool activateRemoveWallBlockerTool();
     bool activateAddScrollBlockerTool();
     bool activateRemoveScrollBlockerTool();
+    // Activate the black edge line tool (BlackEdgeTool): click corners to lay Fallout 2's black
+    // edge wall pieces along the map's edge.
+    bool activateBlackEdgeTool();
     // The active registered tool's id ("" when none) — lets MainWindow tell tool-backed
     // PluginTool sessions apart when syncing toolbar toggle state.
     [[nodiscard]] std::string activeToolId() const;
@@ -487,6 +495,15 @@ private:
     void removeBlockers(const std::vector<std::pair<std::shared_ptr<MapObject>, std::shared_ptr<Object>>>& blockers);
     bool placeWallBlockerAtHex(int hexIndex);
     bool placeScrollBlockerAtHex(int hexIndex);
+    // Places one object of `proPid` on a hex of the current elevation, undoably (no checks for what
+    // is already there).
+    bool placeProtoAtHex(int hexIndex, uint32_t proPid);
+    // BlackEdgeTool support. Placement is one undo step and skips a piece that's already there, so
+    // redrawing over a frame doesn't double it. The piece shapes come from their FRMs (cached once
+    // loaded); the floor centre is what the black faces away from by default.
+    int placeBlackEdgePieces(const std::vector<black_edge::Placement>& pieces);
+    std::optional<black_edge::Shapes> blackEdgeShapes();
+    sf::Vector2f floorCenter() const;
     // Shared activation path for the four Add/Remove Blocker tools: activates the registered tool
     // by id and posts the status-bar message, or reverts on failure.
     bool activateBlockerTool(std::string_view toolId, const QString& statusMessage);
@@ -537,6 +554,9 @@ private:
     // populating its own slice.
     void setupInputCallbacks();
     void bindSelectionCallbacks(InputHandler::Callbacks& callbacks);
+    // Right-click without a drag: selects the object under the cursor if it isn't already part of
+    // the selection, then offers the draw-order commands.
+    void showObjectContextMenu(sf::Vector2f worldPos, sf::Vector2i screenPos);
     void bindInteractionCallbacks(InputHandler::Callbacks& callbacks);
     void bindToolModeCallbacks(InputHandler::Callbacks& callbacks);
     void registerNativeTools();
@@ -558,6 +578,7 @@ private:
     // UI Components
     QVBoxLayout* _layout;
     SFMLWidget* _sfmlWidget;
+    std::optional<black_edge::Shapes> _blackEdgeShapes; // BLACK002/003 frame sizes, once loaded
     class MainWindow* _mainWindow;
 
     // Owns the editor's per-map state and the Qt-free helpers acting on it. Declared before the

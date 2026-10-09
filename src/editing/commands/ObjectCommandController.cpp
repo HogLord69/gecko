@@ -88,6 +88,13 @@ bool ObjectCommandController::registerObjectRotation(const std::vector<std::shar
     return _objectService.registerObjectRotation(objects, beforeDirs, afterDirs);
 }
 
+bool ObjectCommandController::registerObjectReorder(int elevation,
+    const std::vector<std::shared_ptr<MapObject>>& before,
+    const std::vector<std::shared_ptr<MapObject>>& after,
+    const std::string& description) {
+    return _objectService.registerObjectReorder(elevation, before, after, description);
+}
+
 void ObjectCommandController::applyFrmToObject(const std::shared_ptr<Object>& object, uint32_t frmPid, const std::string& frmPath) {
     _objectService.applyFrmToObject(object, frmPid, frmPath);
 }

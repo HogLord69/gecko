@@ -11,6 +11,7 @@
 #include "util/UndoStack.h"
 
 #include <algorithm>
+#include <unordered_map>
 #include <spdlog/spdlog.h>
 
 namespace geck {
@@ -244,6 +245,46 @@ bool ObjectEditService::registerObjectRotation(const std::vector<std::shared_ptr
     cmd.undo = [objects, beforeDirs]() { applyObjectDirections(objects, beforeDirs); };
     cmd.redo = [objects, afterDirs]() { applyObjectDirections(objects, afterDirs); };
 
+    return _batcher.push(std::move(cmd));
+}
+
+void ObjectEditService::applyObjectOrder(int elevation, const std::vector<std::shared_ptr<MapObject>>& order) {
+    if (!_map) {
+        return;
+    }
+    _map->getMapFile().map_objects[elevation] = order;
+
+    // _objects holds only the elevation on screen. Objects not in `order` (another elevation is
+    // showing) all rank last, and the stable sort then leaves the list as it was.
+    std::unordered_map<const MapObject*, std::size_t> rank;
+    rank.reserve(order.size());
+    for (std::size_t i = 0; i < order.size(); ++i) {
+        rank.emplace(order[i].get(), i);
+    }
+    const auto rankOf = [&rank](const std::shared_ptr<Object>& object) {
+        if (!object || !object->hasMapObject()) {
+            return rank.size();
+        }
+        const auto it = rank.find(object->getMapObjectPtr().get());
+        return it == rank.end() ? rank.size() : it->second;
+    };
+    std::ranges::stable_sort(_objects, [&rankOf](const auto& a, const auto& b) { return rankOf(a) < rankOf(b); });
+}
+
+bool ObjectEditService::registerObjectReorder(int elevation,
+    const std::vector<std::shared_ptr<MapObject>>& before,
+    const std::vector<std::shared_ptr<MapObject>>& after,
+    const std::string& description) {
+    if (before == after || before.size() != after.size()) {
+        return false;
+    }
+
+    UndoCommand cmd;
+    cmd.description = description;
+    cmd.undo = [this, elevation, before]() { applyObjectOrder(elevation, before); };
+    cmd.redo = [this, elevation, after]() { applyObjectOrder(elevation, after); };
+
+    cmd.redo();
     return _batcher.push(std::move(cmd));
 }
 
