@@ -67,6 +67,8 @@ public:
         std::function<void(sf::Vector2f worldPos)> onStampPattern;
         std::function<void()> onStampPatternCancel;
         std::function<void()> onStampCycleVariant;
+        std::function<void(sf::Vector2f worldPos)> onPasteClipboard;
+        std::function<void()> onPasteClipboardCancel;
 
         // Eyedropper (P): sample whatever is under the cursor and load it into the matching palette.
         std::function<void(sf::Vector2f worldPos)> onPick;
@@ -95,6 +97,13 @@ public:
         // Keyboard
         std::function<void()> onEscape;
         std::function<void()> onDeleteObjects;
+        // Ctrl+C / Ctrl+X / Ctrl+V while the map has focus.
+        std::function<void()> onCopy;
+        std::function<void()> onCut;
+        std::function<void()> onPaste;
+
+        // A right-click released without dragging in Select mode (a right-drag pans instead).
+        std::function<void(sf::Vector2f worldPos)> onContextMenu;
 
         // Mode cancellation
         std::function<void()> onMarkExitsModeCancelled;
@@ -146,6 +155,8 @@ public:
     void setExitGridPlacementMode(bool enabled) { setActiveMode(enabled, EditorMode::PlaceExitGrid); }
     void setStampPatternMode(bool enabled) { setActiveMode(enabled, EditorMode::StampPattern); }
     bool isInStampPatternMode() const { return _mode == EditorMode::StampPattern; }
+    void setPasteClipboardMode(bool enabled) { setActiveMode(enabled, EditorMode::PasteClipboard); }
+    bool isInPasteClipboardMode() const { return _mode == EditorMode::PasteClipboard; }
     void setMarkExitsMode(bool enabled) { setActiveMode(enabled, EditorMode::MarkExits); }
     void setPluginToolMode(bool enabled) { setActiveMode(enabled, EditorMode::PluginTool); }
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool replaceMode = false);
@@ -201,6 +212,9 @@ private:
     sf::Vector2f _mouseLastWorldPos;
     sf::Vector2f _dragStartWorldPos;
     bool _isDragging = false;
+    // Set once a right-button pan has moved past the drag threshold; a release before that is a
+    // click and opens the context menu instead.
+    bool _panMoved = false;
     bool _immediateSelectionPerformed = false;
     SelectionModifier _dragSelectionModifier = SelectionModifier::NONE; // modifier held when a drag-select began
 

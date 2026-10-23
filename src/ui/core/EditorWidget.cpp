@@ -12,6 +12,7 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QMenu>
 #include <QPoint>
 #include <QSize>
 #include <QStringList>
@@ -1488,6 +1489,15 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         cycleStampVariant();
     };
 
+    callbacks.onPasteClipboard = [this](sf::Vector2f worldPos) {
+        pasteClipboardAt(worldPos);
+    };
+
+    callbacks.onPasteClipboardCancel = [this]() {
+        setMode(EditorMode::Select);
+        Q_EMIT statusMessageRequested("Paste cancelled.");
+    };
+
     callbacks.onMarkExitsLinePreview = [this](const std::vector<sf::Vector2f>& vertices, sf::Vector2f cursor, bool flipSide) {
         updateMarkExitsLinePreview(vertices, cursor, flipSide);
     };
@@ -1515,6 +1525,8 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         updateEdgeHoverCursor(worldPos);
         if (_mode == EditorMode::StampPattern) {
             updateStampPreview(worldPos);
+        } else if (_mode == EditorMode::PasteClipboard) {
+            updatePastePreview(_currentHoverHex);
         }
     };
 
@@ -1522,6 +1534,9 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         if (_mode == EditorMode::StampPattern) {
             setMode(EditorMode::Select);
             Q_EMIT statusMessageRequested("Pattern stamping cancelled.");
+        } else if (_mode == EditorMode::PasteClipboard) {
+            setMode(EditorMode::Select);
+            Q_EMIT statusMessageRequested("Paste cancelled.");
         } else if (_mode == EditorMode::PluginTool) {
             // Host-side cancel guarantee: a tool may consume Esc/right-click, but when it does not, leaving
             // the tool must still work - the hint promises cancel for every tool.
@@ -1560,6 +1575,11 @@ void EditorWidget::bindToolModeCallbacks(InputHandler::Callbacks& callbacks) {
         }
         deleteSelectedObjects();
     };
+
+    callbacks.onCopy = [this]() { copySelection(); };
+    callbacks.onCut = [this]() { cutSelection(); };
+    callbacks.onPaste = [this]() { beginPaste(); };
+    callbacks.onContextMenu = [this](sf::Vector2f) { showObjectContextMenu(); };
 
     callbacks.onMarkExitsModeCancelled = [this]() {
         clearMarkExitsLinePreview();
@@ -1935,8 +1955,12 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
     _exitGridPlacementManager->setExitGridPlacementMode(false);
     _exitGridPlacementManager->setMarkExitsMode(false);
     _playerPositionSelectionMode = false;
-    if (mode != EditorMode::StampPattern) {
+    // Stamp and paste share the ghost vectors, so a switch between them drops the old ghost too.
+    if (mode != previousMode || (mode != EditorMode::StampPattern && mode != EditorMode::PasteClipboard)) {
         clearStampPreview();
+    }
+    if (mode != EditorMode::PasteClipboard) {
+        _pasteClipboard.reset();
     }
     if (mode != EditorMode::PluginTool) {
         // Leaving the tool mode deactivates the tool and drops its preview plus the object-placement
@@ -1959,6 +1983,7 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         _inputHandler->setMarkExitsMode(false);
         _inputHandler->setPlayerPositionMode(false);
         _inputHandler->setStampPatternMode(false);
+        _inputHandler->setPasteClipboardMode(false);
         _inputHandler->setPluginToolMode(false);
     }
 
@@ -1993,6 +2018,11 @@ void EditorWidget::setMode(EditorMode mode, int tileIndex, bool isRoof) {
         case EditorMode::StampPattern:
             if (_inputHandler) {
                 _inputHandler->setStampPatternMode(true);
+            }
+            break;
+        case EditorMode::PasteClipboard:
+            if (_inputHandler) {
+                _inputHandler->setPasteClipboardMode(true);
             }
             break;
         case EditorMode::PluginTool:
@@ -2154,6 +2184,202 @@ void EditorWidget::updateStampPreview(sf::Vector2f worldPos) {
         object->getSprite().setColor(ghostAlpha); // semi-transparent ghost
         _stampPreviewObjects.push_back(std::move(object));
     }
+}
+
+// ---- Copy / cut / paste of map areas ------------------------------------------------------------
+
+namespace {
+    // "42 objects, 120 floor, 30 roof tiles" for the status bar.
+    QString clipboardCounts(std::size_t objects, std::size_t floorTiles, std::size_t roofTiles) {
+        return QString("%1 objects, %2 floor, %3 roof tiles").arg(objects).arg(floorTiles).arg(roofTiles);
+    }
+
+    QString clipboardCounts(const MapClipboard& clipboard) {
+        return clipboardCounts(clipboard.objects().size(), clipboard.floor().size(), clipboard.roof().size());
+    }
+} // namespace
+
+MapClipboard* EditorWidget::mapClipboard() const {
+    return _mainWindow ? &_mainWindow->mapClipboard() : nullptr;
+}
+
+void EditorWidget::copySelection() {
+    MapClipboard* clipboard = mapClipboard();
+    if (!clipboard || !_session.map() || !_session.selectionManager()) {
+        return;
+    }
+    MapClipboard copy;
+    if (!copy.captureSelection(_session.selectionManager()->getCurrentSelection(), _session.map()->getMapFile(), _session.currentElevation())) {
+        Q_EMIT statusMessageRequested("Nothing to copy: select floor, roof or objects first.");
+        return;
+    }
+    *clipboard = std::move(copy);
+    Q_EMIT statusMessageRequested("Copied " + clipboardCounts(*clipboard));
+}
+
+void EditorWidget::cutSelection() {
+    MapClipboard* clipboard = mapClipboard();
+    if (!clipboard || !_session.map() || !_session.selectionManager()) {
+        return;
+    }
+    MapClipboard copy;
+    if (!copy.captureSelection(_session.selectionManager()->getCurrentSelection(), _session.map()->getMapFile(), _session.currentElevation())) {
+        Q_EMIT statusMessageRequested("Nothing to cut: select floor, roof or objects first.");
+        return;
+    }
+    *clipboard = std::move(copy);
+    // The same path (and single undo step) as Delete: the objects go, the tiles stay.
+    deleteSelectedObjects();
+    Q_EMIT statusMessageRequested(QString("Cut %1 objects; copied %2 floor, %3 roof tiles")
+                                      .arg(clipboard->objects().size())
+                                      .arg(clipboard->floor().size())
+                                      .arg(clipboard->roof().size()));
+}
+
+void EditorWidget::beginPaste() {
+    if (!_session.map()) {
+        return;
+    }
+    const MapClipboard* clipboard = mapClipboard();
+    if (!clipboard || clipboard->isEmpty()) {
+        Q_EMIT statusMessageRequested("Nothing to paste: copy part of a map first.");
+        return;
+    }
+    _pasteClipboard = *clipboard;
+    setMode(EditorMode::PasteClipboard);
+    // Pasting again while already pasting keeps the mode, so drop the old ghost here; then show the
+    // new one under the cursor without waiting for the mouse to move.
+    clearStampPreview();
+    updatePastePreview(_currentHoverHex);
+    Q_EMIT statusMessageRequested(
+        QString("Paste mode: click to place %1. Right-click or Esc to exit.").arg(clipboardCounts(*_pasteClipboard)));
+}
+
+void EditorWidget::pasteClipboardAt(sf::Vector2f worldPos) {
+    if (!_pasteClipboard || !_session.map()) {
+        return;
+    }
+    const int hex = _controller.viewport().worldPosToHexIndex(worldPos);
+    if (!_session.hexgrid().containsPosition(hex)) {
+        return;
+    }
+
+    const MapClipboard::Placement placement = _pasteClipboard->place(hex, _session.currentElevation(), _session.map()->getMapFile());
+
+    // Build every sprite before committing. An object whose art won't load is left out together with
+    // its script records, so no record is committed without its owner.
+    pattern::FillPlan plan;
+    plan.tiles = placement.tiles;
+    std::vector<MapScript> scripts;
+    int missingArt = 0;
+    for (const MapClipboard::Placement::Entry& entry : placement.objects) {
+        auto object = pattern::buildSpriteObject(_resources, _session.hexgrid(),
+            entry.object->frm_pid, entry.object->position, entry.object->direction);
+        if (!object) {
+            ++missingArt;
+            continue;
+        }
+        object->setMapObject(entry.object);
+        plan.objects.push_back({ entry.object, std::move(object) }); // NOSONAR: braced-init of an aggregate; emplace_back would need C++20 paren-aggregate-init
+        scripts.insert(scripts.end(), entry.scripts.begin(), entry.scripts.end());
+    }
+
+    pattern::PlacementBatch::Result result;
+    {
+        // One undo entry for the whole drop: its objects, tiles and script records together.
+        ScopedUndoBatch batch(_controller.commandController(), "Paste");
+        result = pattern::PlacementBatch::replay(_controller.commandController(), plan, /*buildSprites*/ true, "Paste");
+        if (!scripts.empty()) {
+            _controller.commandController().addObjectScripts(scripts);
+        }
+    }
+    if (!scripts.empty()) {
+        Q_EMIT mapScriptsChanged();
+    }
+
+    const auto roofTiles = static_cast<std::size_t>(std::ranges::count_if(plan.tiles, [](const TileChange& t) { return t.isRoof; }));
+    QString message = "Pasted " + clipboardCounts(static_cast<std::size_t>(result.objectsPlaced), plan.tiles.size() - roofTiles, roofTiles);
+    if (missingArt + result.objectsFailed > 0) {
+        message += QString(" (%1 missing art)").arg(missingArt + result.objectsFailed);
+    }
+    if (placement.objectsDropped + placement.tilesDropped > 0) {
+        message += QString(" (%1 off-grid)").arg(placement.objectsDropped + placement.tilesDropped);
+    }
+    Q_EMIT statusMessageRequested(message);
+}
+
+void EditorWidget::updatePastePreview(int hex) {
+    if (!_pasteClipboard || _mode != EditorMode::PasteClipboard || !_session.hexgrid().containsPosition(hex)) {
+        clearStampPreview();
+        return;
+    }
+    // Placement moves in 2-hex steps, so the ghost only changes when the snapped anchor does.
+    const int anchor = MapClipboard::snapTarget(hex);
+    if (anchor == _stampPreviewHex) {
+        return;
+    }
+    _stampPreviewHex = anchor;
+    _stampPreviewFloorTiles.clear();
+    _stampPreviewObjects.clear();
+    _stampPreviewRoofTiles.clear();
+
+    const MapClipboard::Resolved resolved = _pasteClipboard->resolve(hex);
+    const auto ghostAlpha = sf::Color(255, 255, 255, ui::constants::sfml::DRAG_PREVIEW_ALPHA);
+    const auto addTiles = [&](const std::vector<MapClipboard::ClipTile>& tiles, const std::vector<int>& targets,
+                              bool isRoof, std::vector<sf::Sprite>& out) {
+        for (std::size_t i = 0; i < tiles.size(); ++i) {
+            if (targets[i] < 0) {
+                continue;
+            }
+            if (auto sprite = pattern::buildTileSprite(_resources, targets[i], isRoof, tiles[i].tileId)) {
+                sprite->setColor(ghostAlpha);
+                out.push_back(std::move(*sprite));
+            }
+        }
+    };
+    addTiles(_pasteClipboard->floor(), resolved.floorTiles, false, _stampPreviewFloorTiles);
+    addTiles(_pasteClipboard->roof(), resolved.roofTiles, true, _stampPreviewRoofTiles);
+
+    const auto& objects = _pasteClipboard->objects();
+    for (std::size_t i = 0; i < objects.size(); ++i) {
+        if (resolved.objectHexes[i] < 0) {
+            continue;
+        }
+        const MapObject& source = *objects[i].object;
+        auto object = pattern::buildSpriteObject(_resources, _session.hexgrid(), source.frm_pid, resolved.objectHexes[i], source.direction);
+        if (!object) {
+            continue;
+        }
+        object->getSprite().setColor(ghostAlpha);
+        _stampPreviewObjects.push_back(std::move(object));
+    }
+}
+
+void EditorWidget::showObjectContextMenu() {
+    if (!_session.map()) {
+        return;
+    }
+    bool canCopy = false;
+    if (const auto* manager = _session.selectionManager()) {
+        canCopy = std::ranges::any_of(manager->getCurrentSelection().items, [](const selection::SelectedItem& item) {
+            return item.isObject() || item.isTile();
+        });
+    }
+    const MapClipboard* clipboard = mapClipboard();
+    const bool canPaste = clipboard && !clipboard->isEmpty();
+    if (!canCopy && !canPaste) {
+        return;
+    }
+
+    QMenu menu(this);
+    if (canCopy) {
+        connect(menu.addAction("Cu&t"), &QAction::triggered, this, &EditorWidget::cutSelection);
+        connect(menu.addAction("&Copy"), &QAction::triggered, this, &EditorWidget::copySelection);
+    }
+    if (canPaste) {
+        connect(menu.addAction("&Paste"), &QAction::triggered, this, &EditorWidget::beginPaste);
+    }
+    menu.exec(QCursor::pos());
 }
 
 // ---- Area fill over the current selection (driven by a Luau fill script) ------------------------

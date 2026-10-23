@@ -146,6 +146,8 @@ public:
     // scripts.lst line. attachScript replaces any existing script on the object.
     bool attachScript(const std::shared_ptr<MapObject>& object, int scriptType, uint32_t programIndex);
     bool detachScript(const std::shared_ptr<MapObject>& object);
+    // Add ready-made object script records (undoable). See ScriptEditService::addObjectScripts.
+    bool addObjectScripts(const std::vector<MapScript>& scripts);
     bool addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius);
     // Edit / remove an existing spatial script by SID (undoable); findSpatialScript reads its
     // current values (e.g. to pre-fill an edit dialog). See ScriptEditService for details.

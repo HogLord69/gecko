@@ -17,6 +17,7 @@
 #include <QVBoxLayout>
 #include "editor/Object.h"
 #include "editor/HexagonGrid.h"
+#include "editor/helper/MapClipboard.h"
 #include "util/Types.h"
 #include "format/map/Map.h"
 #include "format/pro/Pro.h"
@@ -228,6 +229,15 @@ public:
     // variant, and cycleStampVariant() advances which orientation is placed.
     void beginStampPattern(pattern::Pattern pattern);
     void cycleStampVariant();
+
+    // Copy / cut / paste of map areas through the app-wide clipboard (MainWindow::mapClipboard), so
+    // a copy can be pasted on another elevation or into another map. Copy takes the selected floor
+    // and roof tiles and objects on the current elevation; Cut also deletes the selected objects
+    // (tiles stay, as with Delete). Paste enters PasteClipboard mode: a ghost follows the cursor and
+    // each click drops a copy as one undo entry, until right-click or Esc.
+    void copySelection();
+    void cutSelection();
+    void beginPaste();
 
     // --- Area fill over the current selection (driven by a Luau script) ---
     // The current selection as a sorted EditArea: selected floor/roof tiles, the hexes covering them
@@ -657,13 +667,24 @@ private:
     void stampPatternAt(sf::Vector2f worldPos);
 
     // Semi-transparent ghost of the current variant under the cursor (StampPattern mode):
-    // floor tiles (drawn under), objects, and roof tiles (drawn over).
+    // floor tiles (drawn under), objects, and roof tiles (drawn over). PasteClipboard mode draws its
+    // ghost through the same vectors; the two modes are never active together.
     std::vector<sf::Sprite> _stampPreviewFloorTiles;
     std::vector<std::shared_ptr<Object>> _stampPreviewObjects;
     std::vector<sf::Sprite> _stampPreviewRoofTiles;
     int _stampPreviewHex = -1;
     void updateStampPreview(sf::Vector2f worldPos);
     void clearStampPreview();
+
+    // Copy/paste: the app-wide clipboard (null without a MainWindow), and the snapshot of it being
+    // pasted in PasteClipboard mode. Every drop clones from the snapshot afresh.
+    MapClipboard* mapClipboard() const;
+    std::optional<MapClipboard> _pasteClipboard;
+    void pasteClipboardAt(sf::Vector2f worldPos);
+    void updatePastePreview(int hex);
+    // Right-click menu in Select mode: Cut / Copy for a selection, Paste when the clipboard holds
+    // something; nothing opens when neither applies.
+    void showObjectContextMenu();
 
     // Fill preview: a ghost of the previewed FillPlan drawn through the stamp-preview path, plus the
     // pristine plan replayed on Apply. Stamp and fill previews are never live at once.

@@ -547,6 +547,8 @@ add_library(gecko_core STATIC
     editor/Hex.cpp
     editor/helper/ObjectQueries.h
     editor/helper/ObjectQueries.cpp
+    editor/helper/MapClipboard.h
+    editor/helper/MapClipboard.cpp
     editor/worldmap/WorldMapScene.h
     editor/worldmap/WorldMapScene.cpp
 )

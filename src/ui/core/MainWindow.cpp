@@ -545,6 +545,27 @@ void MainWindow::setupMenuBar() {
         }
     });
 
+    _editMenu->addSeparator();
+
+    // The map view handles Ctrl+X/C/V itself (InputHandler) while it has focus, so these shortcuts are
+    // WidgetShortcut: listed in the menu, but never a window-wide shortcut that would take Ctrl+C away
+    // from a text field or the Log panel.
+    const auto addClipboardAction = [this](const QString& text, QKeySequence::StandardKey key,
+                                        const QString& statusTip, void (EditorWidget::*handler)()) {
+        QAction* action = _editMenu->addAction(text);
+        action->setShortcut(key);
+        action->setShortcutContext(Qt::WidgetShortcut);
+        action->setStatusTip(statusTip);
+        connect(action, &QAction::triggered, this, [this, handler]() {
+            if (_currentEditorWidget) {
+                (_currentEditorWidget->*handler)();
+            }
+        });
+    };
+    addClipboardAction("Cu&t", QKeySequence::Cut, "Copy the selection, then delete its objects", &EditorWidget::cutSelection);
+    addClipboardAction("&Copy", QKeySequence::Copy, "Copy the selected floor, roof and objects", &EditorWidget::copySelection);
+    addClipboardAction("&Paste", QKeySequence::Paste, "Click the map to place copies of what was copied", &EditorWidget::beginPaste);
+
     updateUndoRedoActions();
     updateFillSelectionAction();
 
