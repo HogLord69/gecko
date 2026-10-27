@@ -13,6 +13,7 @@ that is copied (Fallout 2, to make base/) is checked afterwards to be byte-for-b
 Flags for scripts / no questions:
     --fallout2 PATH        your Fallout 2 install (the folder with master.dat; RPU in mods/)
     --gecko PATH           gecko.exe
+    --base PATH            an existing working copy to use instead of building one
     --game KEY=PATH        another game, repeatable. Keys: fo1 sonora nevada olympus
                            resurrection sotj yesterday nevada_extended
     --no-pip               do not install Python packages
@@ -73,7 +74,7 @@ def confirm(prompt: str, default: bool, yes: bool) -> bool:
     try:
         a = input(f"{prompt} [{'Y/n' if default else 'y/N'}]: ").strip().lower()
     except EOFError:
-        return default
+        return False  # no one there to answer: never take that as a yes
     return default if not a else a.startswith("y")
 
 
@@ -196,6 +197,7 @@ def main() -> int:
     ap.add_argument("--build-base", action="store_true")
     ap.add_argument("--fallout2")
     ap.add_argument("--gecko")
+    ap.add_argument("--base", help="use an existing working copy instead of workflow/base")
     ap.add_argument("--game", action="append", default=[], metavar="KEY=PATH")
     ap.add_argument("--no-pip", action="store_true")
     ap.add_argument("--no-launchers", action="store_true")
@@ -266,6 +268,8 @@ def main() -> int:
         say(f"  gecko.exe not found. Download the zip, unzip it anywhere: {RELEASES}\n"
             f"  then run  python setup.py  again (or put its path in config.json).")
 
+    if args.base:
+        cfg["base"] = args.base
     config.save(cfg)
     say(f"\n  wrote {config.CONFIG_FILE}")
 
@@ -273,10 +277,14 @@ def main() -> int:
     if fo2:
         say("\n4. Working copy of the game (workflow/base)")
         base = config.base_dir()
-        if args.build_base or not (base / "master.dat").is_file():
-            build_base(fo2, base, yes and args.build_base)
-        else:
+        if (base / "master.dat").is_file():
             say(f"  {base}: ok")
+        elif args.build_base:
+            build_base(fo2, base, yes)
+        elif yes:
+            say("  not built (it copies 1.2 GB). When you want it:  python setup.py --build-base")
+        else:
+            build_base(fo2, base, False)
 
     # --- launchers
     if not args.no_launchers and (cfg.get("games") or fo2):
