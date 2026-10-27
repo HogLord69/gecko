@@ -140,7 +140,11 @@ Render after each step. It's quicker than launching the game.
    ```
 
    `deploy` writes your mod into `base\mods\foc\` (never into the game's own files) and
-   registers the map on the world map.
+   adds your map to Fallout 2's world map. The vanilla towns, world-map art and random
+   encounters stay as they are. Making a total conversion with your own world map? Put
+   `"own_worldmap": true` in `config.json`. Deploy then hides the vanilla towns and
+   expects your art in `mod\data\art\intrface\WRLDMP00.FRM` to `WRLDMP19.FRM` (see
+   `tools/worldmap.py`).
 3. Play: run `base\PLAY.bat`. The map appears at its `world_pos` on the world map.
 
 ---

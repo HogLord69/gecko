@@ -45,6 +45,13 @@ def run_tool(name: str, args: list[str]) -> int:
     if not path.is_file():
         print(f"No tool called '{name}'. `python foc.py tools` lists them.")
         return 2
+    if script in ("validate.py", "deploy.py"):
+        # both compare against the header gen_ids writes from mod/ids: keep it current
+        r = subprocess.run([sys.executable, str(TOOLS / "gen_ids.py")], cwd=str(KIT),
+                           capture_output=True, text=True)
+        if r.returncode:
+            print(r.stdout + r.stderr)
+            return r.returncode
     return subprocess.call([sys.executable, str(path), *args], cwd=str(KIT))
 
 

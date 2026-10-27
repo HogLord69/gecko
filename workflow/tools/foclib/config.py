@@ -13,6 +13,8 @@ Everything machine-specific lives in one file, workflow/config.json, which
       "gecko":    "C:/Tools/gecko/gecko.exe",
       "stamps":   "",                       stamp library. Empty = <repo>/resources/stamps
       "extra_stamps": [],                   more stamp folders (a second library)
+      "own_worldmap": false,                true for a total conversion with its own world
+                                            map (see own_worldmap() below)
       "games": {                            other games to borrow from, keyed as in
         "sonora": "C:/Games/Fallout Sonora",    tools/sources.json. Any you do not own: leave out.
         "nevada": "C:/Games/Fallout Nevada"
@@ -83,6 +85,15 @@ def gecko_exe() -> Path | None:
         if cand.is_file():
             return cand
     return p
+
+
+def own_worldmap() -> bool:
+    """True for a total conversion with its own world map (as the mod these tools were
+    written for has): deploy then hides and locks every vanilla town, flattens
+    worldmap.txt to match replacement art in mod/data/art/intrface/WRLDMP00..19.FRM, and
+    adds its own encounter table. False (the default): Fallout 2's world map, towns and
+    encounters stay as they are and your maps are added to it."""
+    return bool(load().get("own_worldmap", False))
 
 
 def gecko_cli() -> Path:

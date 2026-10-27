@@ -148,6 +148,9 @@ def check_scripts(gi, rep):
 
     # 3a. scripts.h SCRIPT_* defines must equal 1-based line numbers.
     h = HEADERS / "scripts.h"
+    if not HEADERS.is_dir():
+        rep.ok("no scripts_src/headers: script checks skipped (a maps-only mod)")
+        return
     if not h.is_file():
         rep.err("scripts_src/headers/scripts.h missing")
     else:

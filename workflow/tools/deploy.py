@@ -265,10 +265,11 @@ def main() -> int:
                       worldmap.merged_city_txt(gi).encode("cp1252", "replace"))
         d.write_bytes("text\\english\\game\\map.msg",
                       worldmap.merged_map_msg(gi).encode("cp1252", "replace"))
-        d.write_bytes("data\\worldmap.txt",
-                      worldmap.merged_worldmap_txt(gi).encode("cp1252", "replace"))
-        d.write_bytes("text\\english\\game\\worldmap.msg",
-                      worldmap.merged_worldmap_msg(gi).encode("cp1252", "replace"))
+        if worldmap._config.own_worldmap():
+            d.write_bytes("data\\worldmap.txt",
+                          worldmap.merged_worldmap_txt(gi).encode("cp1252", "replace"))
+            d.write_bytes("text\\english\\game\\worldmap.msg",
+                          worldmap.merged_worldmap_msg(gi).encode("cp1252", "replace"))
     except worldmap.WorldmapError as e:
         print(f"ERROR: {e}")
         return 1

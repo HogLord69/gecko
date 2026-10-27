@@ -70,6 +70,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from foclib import GameIndex  # noqa: E402
+from foclib import config as _config  # noqa: E402
 from ids import FOC_START  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -476,7 +477,9 @@ def hide_base_areas(city_txt: str) -> str:
 
 def merged_city_txt(gi: GameIndex, registry: list[dict] | None = None) -> str:
     registry = registry if registry is not None else read_maps_registry()
-    base = hide_base_areas(gi.vfs.read_text(CITY_VFS))
+    base = gi.vfs.read_text(CITY_VFS)
+    if _config.own_worldmap():
+        base = hide_base_areas(base)
     base = base.rstrip("\r\n")
     area0 = base_area_count(gi)
 
@@ -694,7 +697,7 @@ def check(gi: GameIndex, registry: list[dict] | None = None) -> list[str]:
                 f"{owner['filename']}")
 
     # --- no base area can show up on FOC's map
-    base_ids = set(range(base_areas)) - BASE_AREAS_LEFT_ALONE
+    base_ids = (set(range(base_areas)) - BASE_AREAS_LEFT_ALONE) if _config.own_worldmap() else set()
     for area_id in sorted(base_ids & set(areas)):
         if areas[area_id]["start_state"].lower() != "off":
             problems.append(f"city.txt base area {area_id} ({areas[area_id]['name']}) "
@@ -706,13 +709,13 @@ def check(gi: GameIndex, registry: list[dict] | None = None) -> list[str]:
 
     # --- worldmap.txt + FOC's worldmap art
     try:
-        wm = merged_worldmap_txt(gi)
+        wm = merged_worldmap_txt(gi) if _config.own_worldmap() else ""
         if re.search(r"(?mi)^\s*walk_mask_name", wm):
             problems.append("generated worldmap.txt still has a walk_mask_name")
     except WorldmapError as e:
         problems.append(str(e))
     art_dir = ROOT / "mod" / "data" / "art" / "intrface"
-    for t in range(20):
+    for t in (range(20) if _config.own_worldmap() else ()):
         p = art_dir / f"WRLDMP{t:02d}.FRM"
         if not p.is_file():
             problems.append(f"FOC worldmap tile {p.name} missing from mod/data/art/intrface")
