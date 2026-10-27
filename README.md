@@ -8,11 +8,18 @@
 
 ## This fork (HogLord69)
 
-This branch (`hoglord-edits`) adds, on top of upstream gecko:
+> **Making maps?** [`workflow/`](workflow/README.md) holds the whole toolkit I use to make
+> Fallout 2 maps with gecko: browsing other games and borrowing their buildings as stamps,
+> planning a site, building and finishing a map, and putting it in the game. Install
+> Python and gecko, open a terminal in `workflow`, run `python setup.py`, then
+> `python foc.py`. No game files are included; it works from your own installs.
+
+On top of upstream gecko, this fork adds:
 
 - **Fallout 1 support.** Point gecko at a Fallout 1 install and open its maps: the DAT1 archives (`MASTER.DAT`, `CRITTER.DAT`, with their LZSS packing) and version-19 maps, including their one-word ladders, are read and saved.
 - **Nested inventories** (a bag inside a critter's pack) load instead of failing the map.
 - **Stamps** in [`resources/stamps`](resources/stamps): buildings, graveyards, junkyards and ruins cut from Fallout 1, Fallout 2, Sonora, Nevada, Resurrection and Olympus, with credits.
+- **Draw order menu**, a **Black Edge** tool, and a **custom stamps folder**.
 - Add/Remove Blocker tools, `gecko-cli map strip-exit-grids`, no crash on missing art, single instance, sturdier settings.
 
 Windows builds are on the [releases page](https://github.com/HogLord69/gecko/releases).
