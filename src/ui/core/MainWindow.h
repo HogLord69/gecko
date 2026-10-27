@@ -25,6 +25,7 @@
 #include <SFML/Window/Event.hpp>
 
 #include "EditorMode.h"
+#include "editor/helper/MapClipboard.h"
 
 QT_BEGIN_NAMESPACE
 class QVBoxLayout;
@@ -97,6 +98,10 @@ public:
     void raiseTilePalette();
 
     resource::GameResources& resources() const { return *_resourcesShared; }
+
+    // The copy/paste clipboard for map areas. It lives here rather than in an EditorWidget so a copy
+    // survives opening another map and can be pasted into it.
+    MapClipboard& mapClipboard() { return _mapClipboard; }
 
     // Attach the application-wide log record store to the Log panel (the model outlives this
     // window; the in-app spdlog sink feeds it from application startup on).
@@ -415,6 +420,8 @@ private:
     QAction* _worldMapAction = nullptr;
     QAction* _mergeOutlinesAction;
     QAction* _edgeScrollAction;
+
+    MapClipboard _mapClipboard;
 
     bool _isRunning;
 };

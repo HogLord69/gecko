@@ -159,6 +159,10 @@ bool ObjectCommandController::detachScript(const std::shared_ptr<MapObject>& obj
     return _scriptService.detachScript(object);
 }
 
+bool ObjectCommandController::addObjectScripts(const std::vector<MapScript>& scripts) {
+    return _scriptService.addObjectScripts(scripts);
+}
+
 bool ObjectCommandController::addSpatialScript(uint32_t programIndex, int tile, int elevation, int radius) {
     return _scriptService.addSpatialScript(programIndex, tile, elevation, radius);
 }

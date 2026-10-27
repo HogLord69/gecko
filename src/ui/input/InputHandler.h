@@ -68,6 +68,8 @@ public:
         std::function<void(sf::Vector2f worldPos)> onStampPattern;
         std::function<void()> onStampPatternCancel;
         std::function<void()> onStampCycleVariant;
+        std::function<void(sf::Vector2f worldPos)> onPasteClipboard;
+        std::function<void()> onPasteClipboardCancel;
 
         // Eyedropper (P): sample whatever is under the cursor and load it into the matching palette.
         std::function<void(sf::Vector2f worldPos)> onPick;
@@ -93,8 +95,8 @@ public:
         // Hover
         std::function<void(sf::Vector2f worldPos)> onMouseMove;
 
-        // A right-click that didn't drag (a drag pans). `screenPos` is the cursor in widget pixels,
-        // where the host opens its context menu.
+        // A right-click released without dragging in Select mode (a right-drag pans instead).
+        // `screenPos` is the cursor in widget pixels, where the host opens its context menu.
         std::function<void(sf::Vector2f worldPos, sf::Vector2i screenPos)> onContextMenu;
         // Home / PgUp / PgDown / End: draw-order steps for the selected objects.
         std::function<void(object_order::Step step)> onReorderObjects;
@@ -102,6 +104,10 @@ public:
         // Keyboard
         std::function<void()> onEscape;
         std::function<void()> onDeleteObjects;
+        // Ctrl+C / Ctrl+X / Ctrl+V while the map has focus.
+        std::function<void()> onCopy;
+        std::function<void()> onCut;
+        std::function<void()> onPaste;
 
         // Mode cancellation
         std::function<void()> onMarkExitsModeCancelled;
@@ -153,6 +159,8 @@ public:
     void setExitGridPlacementMode(bool enabled) { setActiveMode(enabled, EditorMode::PlaceExitGrid); }
     void setStampPatternMode(bool enabled) { setActiveMode(enabled, EditorMode::StampPattern); }
     bool isInStampPatternMode() const { return _mode == EditorMode::StampPattern; }
+    void setPasteClipboardMode(bool enabled) { setActiveMode(enabled, EditorMode::PasteClipboard); }
+    bool isInPasteClipboardMode() const { return _mode == EditorMode::PasteClipboard; }
     void setMarkExitsMode(bool enabled) { setActiveMode(enabled, EditorMode::MarkExits); }
     void setPluginToolMode(bool enabled) { setActiveMode(enabled, EditorMode::PluginTool); }
     void setTilePlacementMode(bool enabled, int tileIndex = -1, bool replaceMode = false);

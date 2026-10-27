@@ -74,6 +74,13 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
             return;
         }
 
+        if (_mode == EditorMode::PasteClipboard) {
+            if (_callbacks.onPasteClipboard) {
+                _callbacks.onPasteClipboard(worldPos);
+            }
+            return;
+        }
+
         if (_mode == EditorMode::MarkExits) {
             // "Draw edge": a click appends a vertex, a double-click finalizes. Double-click detection
             // uses the RAW cursor (physical mouse stillness); with Shift held the appended vertex is
@@ -156,6 +163,12 @@ void InputHandler::handleMousePressed(const sf::Event::MouseButtonPressed& event
                 _callbacks.onStampPatternCancel();
             }
             spdlog::debug("Stamp pattern mode cancelled with right-click");
+        } else if (_mode == EditorMode::PasteClipboard) {
+            _mode = EditorMode::Select;
+            if (_callbacks.onPasteClipboardCancel) {
+                _callbacks.onPasteClipboardCancel();
+            }
+            spdlog::debug("Paste mode cancelled with right-click");
         } else {
             _currentAction = EditorAction::PANNING;
             _mouseStartPos = event.position;
@@ -266,6 +279,10 @@ void InputHandler::handleMouseMoved(const sf::Event::MouseMoved& event,
                     static_cast<float>(-delta.y)));
             }
             _mouseLastPos = event.position;
+            if (!_panMoved) {
+                const sf::Vector2i moved = event.position - _mouseStartPos;
+                _panMoved = (moved.x * moved.x + moved.y * moved.y) > 25; // 5 pixel drag threshold
+            }
             break;
         }
 
@@ -362,6 +379,20 @@ void InputHandler::handleKeyPressed(const sf::Event::KeyPressed& event) {
                     _callbacks.onReorderObjects(Step::SendToBack);
                     break;
             }
+        }
+    } else if (event.control && event.code == sf::Keyboard::Key::C) {
+        // The clipboard keys arrive here rather than as window shortcuts, so Ctrl+C in a text field
+        // or the log panel still copies text (SFMLWidget claims them only while the map has focus).
+        if (_callbacks.onCopy) {
+            _callbacks.onCopy();
+        }
+    } else if (event.control && event.code == sf::Keyboard::Key::X) {
+        if (_callbacks.onCut) {
+            _callbacks.onCut();
+        }
+    } else if (event.control && event.code == sf::Keyboard::Key::V) {
+        if (_callbacks.onPaste) {
+            _callbacks.onPaste();
         }
     } else if (event.code == sf::Keyboard::Key::R) {
         // The Rotate toolbar shortcut is disabled by the editor while stamping (and while a

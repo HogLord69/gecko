@@ -551,6 +551,8 @@ add_library(gecko_core STATIC
     editor/helper/ObjectOrder.cpp
     editor/helper/BlackEdge.h
     editor/helper/BlackEdge.cpp
+    editor/helper/MapClipboard.h
+    editor/helper/MapClipboard.cpp
     editor/worldmap/WorldMapScene.h
     editor/worldmap/WorldMapScene.cpp
 )
