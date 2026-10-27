@@ -19,7 +19,9 @@ On top of upstream gecko, this fork adds:
 - **Fallout 1 support.** Point gecko at a Fallout 1 install and open its maps: the DAT1 archives (`MASTER.DAT`, `CRITTER.DAT`, with their LZSS packing) and version-19 maps, including their one-word ladders, are read and saved.
 - **Nested inventories** (a bag inside a critter's pack) load instead of failing the map.
 - **Stamps** in [`resources/stamps`](resources/stamps): buildings, graveyards, junkyards and ruins cut from Fallout 1, Fallout 2, Sonora, Nevada, Resurrection and Olympus, with credits.
-- **Draw order menu**, a **Black Edge** tool, and a **custom stamps folder**.
+- **Copy, cut and paste of map areas** (Ctrl+C / Ctrl+X / Ctrl+V): tiles and objects, onto another elevation or into another map. Paste shows a ghost; each click drops a copy.
+- **Right-click menu**: Cut / Copy / Paste and the draw order (Bring to Front, Forward, Backward, Send to Back; also Home / PgUp / PgDn / End).
+- A **Black Edge** tool and a **custom stamps folder**.
 - Add/Remove Blocker tools, `gecko-cli map strip-exit-grids`, no crash on missing art, single instance, sturdier settings.
 
 Windows builds are on the [releases page](https://github.com/HogLord69/gecko/releases).
