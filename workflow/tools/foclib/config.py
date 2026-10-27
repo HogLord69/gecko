@@ -70,7 +70,14 @@ def base_dir() -> Path:
 
 def stamps_dir() -> Path:
     """Root of the stamp library: it contains 'Fallout 2 Stamps', 'Sonora Stamps', ..."""
-    return _path(load().get("stamps")) or REPO / "resources" / "stamps"
+    configured = _path(load().get("stamps"))
+    if configured:
+        return configured
+    # a git checkout keeps them in resources/stamps; the release zip in stamps/
+    for cand in (REPO / "resources" / "stamps", REPO / "stamps"):
+        if cand.is_dir():
+            return cand
+    return REPO / "resources" / "stamps"
 
 
 def stamp_libraries() -> list[Path]:
@@ -81,7 +88,8 @@ def gecko_exe() -> Path | None:
     p = _path(load().get("gecko"))
     if p and p.is_file():
         return p
-    for cand in (REPO / "build" / "gecko.exe", REPO / "build" / "Release" / "gecko.exe"):
+    # the release zip has gecko.exe beside workflow/; a source build has it in build/
+    for cand in (REPO / "gecko.exe", REPO / "build" / "gecko.exe", REPO / "build" / "Release" / "gecko.exe"):
         if cand.is_file():
             return cand
     return p

@@ -131,7 +131,7 @@ def find_game(key: str, all_dirs: list[Path]) -> Path | None:
 
 def find_gecko() -> Path | None:
     repo = config.REPO
-    cands = [repo / "build" / "gecko.exe", repo / "build" / "Release" / "gecko.exe",
+    cands = [repo / "gecko.exe", repo / "build" / "gecko.exe", repo / "build" / "Release" / "gecko.exe",
              repo.parent / "gecko" / "gecko.exe"]
     for sub in ("Downloads", "Desktop"):
         d = Path.home() / sub

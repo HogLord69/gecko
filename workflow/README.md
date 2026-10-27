@@ -30,7 +30,10 @@ Resurrection, Story of the Jackal, Fallout: Yesterday.
 
 ## Set up (once)
 
-1. Clone or download this repo.
+1. Get it. The easiest way is the zip from
+   [Releases](https://github.com/HogLord69/gecko/releases/latest): gecko, the stamps and
+   this `workflow` folder in one download. Unzip it anywhere. (Or clone this repo, if you
+   build gecko yourself.)
 2. Open a terminal in the `workflow` folder.
 3. Run:
 
@@ -75,8 +78,9 @@ read as post-apocalyptic.
 A **stamp** is a piece of a map (a building with its walls, floor, roof and furniture)
 that you drop into your own map in gecko with **Edit → Stamp Pattern**.
 
-* **Ready-made:** [`resources/stamps`](../resources/stamps) has 1,567 stamps cut from
-  Fallout 1, Fallout 2 and four total conversions, sorted by what they're built from. To use
+* **Ready-made:** [`resources/stamps`](../resources/stamps) (`stamps` in the zip) has
+  1,567 stamps cut from Fallout 1, Fallout 2 and four total conversions, sorted by what
+  they're built from, plus 21 props of my own (`HogLord Props`). To use
   them in gecko, copy the folders you want into `%LOCALAPPDATA%\gecko\gecko\patterns\`.
   Only the `Fallout 2 Stamps` folder draws correctly in your mod as it is. The others hold
   their own game's ids, so see the next point.

@@ -10,6 +10,7 @@ Ready-made gecko stamps (Edit → Stamp Pattern) cut from the maps of Fallout 1,
 | `Nevada Stamps` | 310 | Fallout: Nevada's own | Fallout: Nevada |
 | `Resurrection Stamps` | 193 | Fallout 1.5: Resurrection's own | Fallout 1.5: Resurrection |
 | `Olympus Stamps` | 79 | Olympus 2207's own | Olympus 2207 |
+| `HogLord Props` | 21 | Fallout 2's | Fallout 2, with or without the Restoration Project. My own compositions: barrels, car junk, a reactor, relay walls, tents, a trash house, a warehouse, adobe huts, a clinic, crops, a farm, a pen, ruins, a tavern and a well |
 
 A stamp stores the game's proto and art ids, not images. It only draws correctly in a gecko session with the game data listed above; stamped into another game, the same ids point at different pieces.
 
