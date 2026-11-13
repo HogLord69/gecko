@@ -133,6 +133,15 @@ set(GECK_APP_SOURCES
     ui/dialogs/FillDialog.cpp
     ui/dialogs/MapBrowserDialog.h
     ui/dialogs/MapBrowserDialog.cpp
+    ui/dialogs/AddSceneryDialog.h
+    ui/dialogs/AddSceneryDialog.cpp
+    ui/dialogs/CutBuildingDialog.h
+    ui/dialogs/CutBuildingDialog.cpp
+
+    # Mod tools (Tools menu): runs the mod's tools/gecko_assets.py
+    ui/assets/ModAssetAction.h
+    ui/assets/ModToolsRunner.h
+    ui/assets/ModToolsRunner.cpp
 
     # Qt6 UI Widgets
     ui/widgets/SFMLWidget.h

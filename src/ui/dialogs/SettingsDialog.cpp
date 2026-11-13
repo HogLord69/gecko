@@ -4,8 +4,15 @@
 #include "ui/widgets/TextEditorWidget.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/Settings.h"
+#include "ui/QtDialogs.h"
+#include "ui/assets/ModToolsRunner.h"
 
 #include <QApplication>
+#include <QDir>
+#include <QFormLayout>
+#include <QJsonArray>
+#include <QLineEdit>
+#include <QSignalBlocker>
 #include <QScrollArea>
 #include <QStyle>
 #include <QMessageBox>
@@ -93,8 +100,113 @@ void SettingsDialog::setupTabs() {
     setupViewportTab();
     setupEditorTab();
     setupColorsTab();
+    setupModToolsTab();
 
     _mainLayout->addWidget(_tabWidget);
+}
+
+void SettingsDialog::setupModToolsTab() {
+    _modToolsTab = new QWidget();
+    auto* layout = new QVBoxLayout(_modToolsTab);
+    layout->setContentsMargins(SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE, SPACING_LOOSE);
+    layout->setSpacing(SPACING_NORMAL);
+
+    auto* intro = new QLabel(
+        "The Tools menu (Add Scenery from Picture, Apply New Art, and the copy and name entries on the "
+        "map's right-click menu) runs your mod's own tools: tools/gecko_assets.py in the mod folder, "
+        "with Python. Left empty, gecko uses the nearest folder above gecko.exe that has them.\n\n"
+        "This is not a data path: the mod folder is your project, not game data. Data paths stay on the "
+        "General tab (for FOC: base\\mods\\foc, the deployed mod).");
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+
+    auto* form = new QFormLayout();
+    form->setSpacing(SPACING_NORMAL);
+
+    auto* rootRow = new QHBoxLayout();
+    _modToolsRootEdit = new QLineEdit();
+    const std::filesystem::path detected = ModToolsRunner::detectRootAboveApplication();
+    _modToolsRootEdit->setPlaceholderText(detected.empty()
+            ? QString("e.g. F:\\FOCMod")
+            : "found automatically: " + QDir::toNativeSeparators(QString::fromStdU16String(detected.u16string())));
+    rootRow->addWidget(_modToolsRootEdit, 1);
+    auto* rootBrowse = new QPushButton("Browse...");
+    connect(rootBrowse, &QPushButton::clicked, this, [this]() {
+        const QString dir = QtDialogs::selectDirectory(this, "Choose the Mod Folder");
+        if (!dir.isEmpty()) {
+            _modToolsRootEdit->setText(QDir::toNativeSeparators(dir));
+        }
+    });
+    rootRow->addWidget(rootBrowse);
+    form->addRow("Mod folder:", rootRow);
+
+    auto* pythonRow = new QHBoxLayout();
+    _pythonEdit = new QLineEdit();
+    _pythonEdit->setPlaceholderText("python (from PATH)");
+    pythonRow->addWidget(_pythonEdit, 1);
+    auto* pythonBrowse = new QPushButton("Browse...");
+    connect(pythonBrowse, &QPushButton::clicked, this, [this]() {
+        const QString exe = QtDialogs::openFile(this, "Choose Python", "Python (python*.exe python*);;All Files (*)");
+        if (!exe.isEmpty()) {
+            _pythonEdit->setText(QDir::toNativeSeparators(exe));
+        }
+    });
+    pythonRow->addWidget(pythonBrowse);
+    form->addRow("Python:", pythonRow);
+    layout->addLayout(form);
+
+    auto* checkRow = new QHBoxLayout();
+    auto* checkButton = new QPushButton("Check");
+    checkButton->setToolTip("Run the mod tools once with these settings");
+    connect(checkButton, &QPushButton::clicked, this, &SettingsDialog::checkModTools);
+    checkRow->addWidget(checkButton);
+    _modToolsStatus = new QLabel();
+    _modToolsStatus->setWordWrap(true);
+    _modToolsStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    checkRow->addWidget(_modToolsStatus, 1);
+    layout->addLayout(checkRow);
+
+    layout->addStretch();
+    _tabWidget->addTab(_modToolsTab, "Mod Tools");
+
+    connect(_modToolsRootEdit, &QLineEdit::textChanged, this, [this]() {
+        _modToolsStatus->clear();
+        onWidgetChanged();
+    });
+    connect(_pythonEdit, &QLineEdit::textChanged, this, [this]() {
+        _modToolsStatus->clear();
+        onWidgetChanged();
+    });
+}
+
+void SettingsDialog::checkModTools() {
+    const QString typed = _modToolsRootEdit->text().trimmed();
+    const std::filesystem::path root = typed.isEmpty() ? ModToolsRunner::detectRootAboveApplication()
+                                                       : std::filesystem::path(typed.toStdU16String());
+    if (!ModToolsRunner::isModToolsRoot(root)) {
+        _modToolsStatus->setStyleSheet(ui::theme::styles::statusError());
+        _modToolsStatus->setText(typed.isEmpty() ? QString("No mod folder found above gecko.exe: choose one.")
+                                                 : QString("No tools/gecko_assets.py in that folder."));
+        return;
+    }
+    ModToolsRunner runner(root, _pythonEdit->text());
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    const ModToolResult result = runner.runAndWait({ "info" }, 60000);
+    QApplication::restoreOverrideCursor();
+    if (!result.ok) {
+        _modToolsStatus->setStyleSheet(ui::theme::styles::statusError());
+        _modToolsStatus->setText(result.error);
+        return;
+    }
+    _modToolsStatus->setStyleSheet(ui::theme::styles::statusSuccess());
+    QString text = QString("Working: Python %1, mod at %2.")
+                       .arg(result.json.value("python").toString(),
+                           QDir::toNativeSeparators(result.json.value("root").toString()));
+    const int pending = result.json.value("pending").toInt();
+    if (pending > 0) {
+        text += QString(" %1 new piece(s) or name change(s) wait for Tools > Apply New Art.").arg(pending);
+    }
+    _modToolsStatus->setText(text);
 }
 
 void SettingsDialog::setupViewportTab() {
@@ -255,6 +367,15 @@ void SettingsDialog::loadSettings() {
     _gameLocationWidget->setExecutableLocation(settings.getExecutableGameLocation());
     _gameLocationWidget->setDataDirectory(settings.getGameDataDirectory());
 
+    {
+        const QSignalBlocker blockRoot(_modToolsRootEdit);
+        const QSignalBlocker blockPython(_pythonEdit);
+        _modToolsRootEdit->setText(QDir::toNativeSeparators(QString::fromStdU16String(settings.getModToolsRoot().u16string())));
+        const QString python = settings.getPythonExecutable();
+        _pythonEdit->setText(python == "python" ? QString() : python);
+        _modToolsStatus->clear();
+    }
+
     // Selection colours. Defaults mirror RenderingEngine::SelectionPalette — keep in sync.
     const QMap<QString, QColor> defaults{
         { "object", QColor(140, 110, 220) },
@@ -296,6 +417,9 @@ void SettingsDialog::saveSettings() {
 
     settings.setExecutableGameLocation(_gameLocationWidget->getExecutableLocation());
     settings.setGameDataDirectory(_gameLocationWidget->getDataDirectory());
+
+    settings.setModToolsRoot(std::filesystem::path(_modToolsRootEdit->text().trimmed().toStdU16String()));
+    settings.setPythonExecutable(_pythonEdit->text());
 
     for (auto it = _selectionColors.constBegin(); it != _selectionColors.constEnd(); ++it) {
         settings.setSelectionColor(it.key(), it.value());
