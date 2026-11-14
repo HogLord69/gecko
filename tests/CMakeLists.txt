@@ -51,6 +51,7 @@ add_executable(general_tests
     general/test_object_queries.cpp
     general/test_object_offset.cpp
     general/test_object_order.cpp
+    general/test_item_amount.cpp
     general/test_black_edge.cpp
     general/test_reading_dat.cpp
     general/test_reading_map.cpp

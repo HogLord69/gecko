@@ -88,6 +88,7 @@ void ItemSelectorDialog::setupUI() {
     _amountSpin = new QSpinBox(this);
     _amountSpin->setRange(1, 99999);
     _amountSpin->setValue(1);
+    _amountSpin->setToolTip("How many. For ammo, the number of rounds.");
 
     auto* detailsGroup = new QGroupBox("Item", this);
     auto* detailsLayout = new QFormLayout(detailsGroup);
