@@ -3186,26 +3186,7 @@ std::optional<uint32_t> MainWindow::bringInFromOtherGame(const QString& source, 
         return std::nullopt;
     }
 
-    // The overlay holds the lists a deploy would write and the new files. Mounted last it wins over
-    // the mod's deployed layer; the lists it replaces are read again from it.
-    const QString overlay = result.json.value("overlay").toString();
-    if (!overlay.isEmpty()) {
-        const std::filesystem::path overlayPath(overlay.toStdU16String());
-        auto& files = _resourcesShared->files();
-        const auto mounts = files.mounts();
-        const bool mounted = std::any_of(mounts.begin(), mounts.end(), [&overlayPath](const auto& mount) {
-            std::error_code ec;
-            return std::filesystem::equivalent(mount.sourcePath, overlayPath, ec);
-        });
-        if (mounted) {
-            files.refresh();
-        } else {
-            files.addDataPath(overlayPath);
-        }
-        for (const auto& value : result.json.value("changed").toArray()) {
-            _resourcesShared->repository().forget(value.toString().toStdString());
-        }
-    }
+    mountOverlay(result.json);
 
     QString message = result.json.value("new").toBool()
         ? QString("Brought %1 in from %2 as %3. Tools > Apply New Art puts it in the game.")
@@ -3219,6 +3200,58 @@ std::optional<uint32_t> MainWindow::bringInFromOtherGame(const QString& source, 
     showStatusMessage(message);
     spdlog::info("{}", message.toStdString());
     return pid;
+}
+
+void MainWindow::mountOverlay(const QJsonObject& answer) {
+    // The overlay holds the lists a deploy would write and the new files. Mounted last it wins over
+    // the mod's deployed layer; the lists it replaces are read again from it.
+    const QString overlay = answer.value("overlay").toString();
+    if (overlay.isEmpty()) {
+        return;
+    }
+    const std::filesystem::path overlayPath(overlay.toStdU16String());
+    auto& files = _resourcesShared->files();
+    const auto mounts = files.mounts();
+    const bool mounted = std::any_of(mounts.begin(), mounts.end(), [&overlayPath](const auto& mount) {
+        std::error_code ec;
+        return std::filesystem::equivalent(mount.sourcePath, overlayPath, ec);
+    });
+    if (mounted) {
+        files.refresh();
+    } else {
+        files.addDataPath(overlayPath);
+    }
+    for (const auto& value : answer.value("changed").toArray()) {
+        _resourcesShared->repository().forget(value.toString().toStdString());
+    }
+}
+
+std::optional<QString> MainWindow::convertStampFromOtherGame(const QString& source, const QString& stampPath) {
+    auto runner = makeModToolsRunner();
+    if (!runner) {
+        return std::nullopt;
+    }
+    showStatusMessage("Bringing the stamp's pieces into your mod (the first time takes a little while)...");
+    const ModToolResult result = runWithWaitCursor(*runner, { "stamp-convert", source, QDir::toNativeSeparators(stampPath) });
+    if (!result.ok) {
+        clearStatusMessage();
+        QtDialogs::showWarning(this, "Stamp from Another Game", result.error);
+        return std::nullopt;
+    }
+    mountOverlay(result.json);
+    const QString label = result.json.value("label").toString();
+    const QString folder = QFileInfo(QFileInfo(result.json.value("stamp").toString()).path()).fileName();
+    QString message = result.json.value("new").toBool()
+        ? QString("Converted the stamp from %1 into your mod; it is in your stamps (Custom > %2). "
+                  "Tools > Apply New Art puts its new pieces in the game.")
+              .arg(label, folder)
+        : QString("Using the stamp from %1 converted before (Custom > %2).").arg(label, folder);
+    for (const auto& note : result.json.value("notes").toArray()) {
+        message += " " + note.toString();
+    }
+    showStatusMessage(message);
+    spdlog::info("{}", message.toStdString());
+    return result.json.value("stamp").toString();
 }
 
 void MainWindow::onPlayGame() {
@@ -3277,10 +3310,41 @@ void MainWindow::showStampPatternDialog() {
     }
 
     PatternBrowserDialog dialog(*_resourcesShared, this);
+    if (modToolsConfigured()) {
+        // The stamps that came with gecko and were cut from another game: drawn with that game's data,
+        // converted into the mod when picked.
+        dialog.setOtherGames(
+            [this]() {
+                std::map<QString, PatternBrowserDialog::StampGame> games;
+                ModToolsRunner runner(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()), _settings->getPythonExecutable());
+                const QJsonObject folders = runner.runAndWait({ "stamp-games" }).json.value("folders").toObject();
+                for (auto it = folders.constBegin(); it != folders.constEnd(); ++it) {
+                    const QJsonObject game = it.value().toObject();
+                    games[it.key()] = { game.value("id").toString(), game.value("label").toString(),
+                        game.value("available").toBool(), game.value("why").toString() };
+                }
+                return games;
+            },
+            [this](const QString& id, const QString& label) -> resource::GameResources* {
+                return _objectPalettePanel ? _objectPalettePanel->otherGameResources(id, label) : nullptr;
+            });
+    }
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
     auto selected = dialog.selectedPattern();
+    if (selected.has_value() && !dialog.selectedGameId().isEmpty()) {
+        const auto converted = convertStampFromOtherGame(dialog.selectedGameId(), dialog.selectedPath());
+        if (!converted) {
+            return;
+        }
+        QFile file(*converted);
+        selected = file.open(QIODevice::ReadOnly) ? pattern::PatternSerializer::deserialize(file.readAll()) : std::nullopt;
+        if (!selected) {
+            QtDialogs::showWarning(this, "Stamp from Another Game", "The converted stamp couldn't be read: " + *converted);
+            return;
+        }
+    }
     if (selected.has_value()) {
         _currentEditorWidget->beginStampPattern(std::move(*selected));
     }

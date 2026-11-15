@@ -28,7 +28,11 @@ It works with the [map workflow](#the-map-workflow) that comes with this build: 
 
 ![The Pattern Library with "Came with gecko": Fallout 2's adobe buildings](docs/hoglord/pattern-library.png)
 
-**Edit > Stamp Pattern** lists the stamps that come with this build under your own, as **Came with gecko**: 1,567 buildings, graveyards, junkyards and ruins cut from Fallout 1, Fallout 2, Sonora, Nevada, Resurrection and Olympus, sorted by what they are built from, and **HogLord Props**, 21 props of my own. Nothing has to be copied anywhere. A stamp holds its game's object numbers, not pictures, so use each folder with the game it is named for. The credits are in [`resources/stamps/README.md`](resources/stamps/README.md).
+**Edit > Stamp Pattern** lists the stamps that come with this build under your own, as **Came with gecko**: 1,567 buildings, graveyards, junkyards and ruins cut from Fallout 1, Fallout 2, Sonora, Nevada, Resurrection and Olympus, sorted by what they are built from, and **HogLord Props**, 21 props of my own. Nothing has to be copied anywhere. **Fallout 2 Stamps** and **HogLord Props** stamp as they are. The credits are in [`resources/stamps/README.md`](resources/stamps/README.md).
+
+![Fallout: Sonora's adobe buildings, drawn with Sonora's own data](docs/hoglord/stamps-other-game.png)
+
+A stamp holds its game's object numbers, not pictures, so a stamp cut from another game draws the wrong pieces in yours. With the [map workflow](#the-map-workflow) set up for that game, its folder is drawn with the game's own data, and picking a stamp converts it first: a copy goes into your stamps (**Custom > From Fallout Sonora**), each piece is matched to one your game has or brought into your mod with new numbers, and each floor tile is matched or brought into a spare tile slot (when those run out, the closest-looking tile is used). It then stamps the same as in its own game; **Tools > Apply New Art** puts the new pieces in the game, and until then gecko shows them anyway, after a restart too.
 
 ### New scenery from a picture
 

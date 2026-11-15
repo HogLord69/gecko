@@ -19,6 +19,8 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+
+class QJsonObject;
 #include <string>
 #include <filesystem>
 #include <utility>
@@ -96,6 +98,10 @@ public:
     /// deploy would add) is mounted on top of the data for this session. Its PID in the mod, or
     /// nothing after saying why not.
     std::optional<uint32_t> bringInFromOtherGame(const QString& source, uint32_t sourcePid);
+    /// Copy a stamp in another game's numbers into the user's stamps, converted by the mod tools
+    /// (gecko_assets.py stamp-convert), and mount what that brought in; the converted copy's path,
+    /// or nothing after saying why not.
+    std::optional<QString> convertStampFromOtherGame(const QString& source, const QString& stampPath);
     TilePalettePanel* getTilePalettePanel() const { return _tilePalettePanel; }
     FileBrowserPanel* getFileBrowserPanel() const { return _fileBrowserPanel; }
 
@@ -186,6 +192,8 @@ private slots:
     void editNameAndText(ModToolsRunner& runner, quint32 pid);
     /// Give the object palette the other games the mod tools list (gecko_assets.py sources/source).
     void connectOtherGames();
+    /// Mount (or re-read) the overlay a mod tools answer names and forget the lists it replaces.
+    void mountOverlay(const QJsonObject& answer);
     void onPlayGame();
     void showSavePatternDialog();
     void showStampPatternDialog();

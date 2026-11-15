@@ -201,12 +201,50 @@ TEST_CASE("README pictures", "[.readme]") {
         auto* tree = dialog.findChild<QTreeView*>("bundledStampsTree");
         REQUIRE(tree != nullptr);
         auto* model = qobject_cast<QFileSystemModel*>(tree->model());
-        const QString folder = QDir(bundled).filePath("Fallout 2 Stamps/Adobe");
+        const QString pick = env("GECKO_SHOTS_STAMP_FOLDER").isEmpty() ? QString("Fallout 2 Stamps/Adobe")
+                                                                       : env("GECKO_SHOTS_STAMP_FOLDER");
+        const QString folder = QDir(bundled).filePath(pick);
         dialog.show();
         wait(1500);
-        tree->expand(model->index(QDir(bundled).filePath("Fallout 2 Stamps")));
+        tree->expand(model->index(QFileInfo(folder).path()));
         tree->setCurrentIndex(model->index(folder));
-        save(dialog, "pattern-library.png");
+        save(dialog, env("GECKO_SHOTS_STAMP_FOLDER").isEmpty() ? QString("pattern-library.png")
+                                                                : "stamps-" + QString(pick).replace('/', '-').replace(' ', '_') + ".png");
+    }
+
+    SECTION("other game's stamps") {
+        // Sonora's folder as the Pattern Library shows it with the mod tools: drawn with Sonora's data.
+        auto tools = runner();
+        std::map<QString, std::unique_ptr<geck::resource::GameResources>> loadedGames;
+        geck::PatternBrowserDialog dialog(*resources);
+        dialog.setOtherGames(
+            [&tools]() {
+                std::map<QString, geck::PatternBrowserDialog::StampGame> games;
+                const QJsonObject folders = tools->runAndWait({ "stamp-games" }).json.value("folders").toObject();
+                for (auto it = folders.constBegin(); it != folders.constEnd(); ++it) {
+                    const QJsonObject game = it.value().toObject();
+                    games[it.key()] = { game.value("id").toString(), game.value("label").toString(),
+                        game.value("available").toBool(), game.value("why").toString() };
+                }
+                return games;
+            },
+            [&tools, &loadedGames](const QString& id, const QString&) -> geck::resource::GameResources* {
+                auto game = std::make_unique<geck::resource::GameResources>();
+                for (const auto& value : tools->runAndWait({ "source", id }).json.value("paths").toArray()) {
+                    game->files().addDataPath(std::filesystem::path(value.toString().toStdU16String()));
+                }
+                return (loadedGames[id] = std::move(game)).get();
+            });
+        dialog.resize(980, 640);
+        auto* tree = dialog.findChild<QTreeView*>("bundledStampsTree");
+        REQUIRE(tree != nullptr);
+        auto* model = qobject_cast<QFileSystemModel*>(tree->model());
+        const QString bundled = geck::pattern::PatternLibrary::bundledDir();
+        dialog.show();
+        wait(1500);
+        tree->expand(model->index(QDir(bundled).filePath("Sonora Stamps")));
+        tree->setCurrentIndex(model->index(QDir(bundled).filePath("Sonora Stamps/Adobe")));
+        save(dialog, "stamps-other-game.png");
     }
 
     SECTION("first run") {

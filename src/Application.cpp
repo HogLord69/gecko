@@ -23,6 +23,7 @@
 #include "ui/Settings.h"
 #include "ui/QtDialogs.h"
 #include "ui/core/MainWindow.h"
+#include "ui/assets/ModToolsRunner.h"
 #include "ui/core/EditorWidget.h"
 #include "ui/widgets/LoadingWidget.h"
 #include "ui/dialogs/SettingsDialog.h"
@@ -368,6 +369,19 @@ void Application::loadDataPaths() {
     // folder, not in the game data — keep it mounted (lowest priority) regardless of how the
     // user configured the data paths, or every map load fails on art/tiles/blank.frm.
     util::ensureFallbackDataPath(dataPaths, getResourcesPath());
+
+    // Pieces and stamps brought in from other games since the mod was last deployed live in the mod
+    // tools' overlay (gecko_assets.py) until a deploy removes it: on top, so they draw after a restart
+    // too. In memory only, never saved as a data path.
+    if (const auto toolsRoot = ModToolsRunner::resolveRoot(settings.getModToolsRoot()); !toolsRoot.empty()) {
+        const auto overlay = toolsRoot / "build" / "gecko_assets" / "overlay";
+        std::error_code ec;
+        if (std::filesystem::is_directory(overlay, ec)) {
+            spdlog::info("Mounting the mod tools' overlay (not deployed yet): {}",
+                QString::fromStdU16String(overlay.u16string()).toStdString());
+            dataPaths.push_back(overlay);
+        }
+    }
 
     spdlog::info("Loading {} data paths with progress dialog", dataPaths.size());
     for (const auto& path : dataPaths) {

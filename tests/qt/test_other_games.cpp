@@ -11,6 +11,8 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFileSystemModel>
+#include <QLabel>
+#include <QListWidget>
 #include <QTreeView>
 #include <QComboBox>
 #include <QTemporaryDir>
@@ -193,4 +195,60 @@ TEST_CASE("The Pattern Library lists the stamps that came with gecko under the u
     CHECK(QFileInfo(model->filePath(tree->rootIndex())).canonicalFilePath() == bundled);
     CHECK(model->isReadOnly());
     CHECK(QDir(bundled).exists("Fallout 2 Stamps"));
+}
+
+TEST_CASE("The Pattern Library draws another game's stamps with its data and says it converts them", "[qt][othergames]") {
+    const QString bundled = geck::pattern::PatternLibrary::bundledDir();
+    if (bundled.isEmpty() || !QDir(bundled).exists("Sonora Stamps/Adobe")) {
+        SKIP("no stamps beside this test program");
+    }
+    geck::resource::GameResources own;
+    geck::resource::GameResources sonora;
+    QStringList asked;
+    geck::PatternBrowserDialog dialog(own);
+    dialog.setOtherGames(
+        []() {
+            return std::map<QString, geck::PatternBrowserDialog::StampGame>{
+                { "Sonora Stamps", { "sonora", "Fallout: Sonora", true, {} } },
+                { "Olympus Stamps", { "olympus", "Olympus 2207", false, "left out here" } },
+            };
+        },
+        [&asked, &sonora](const QString& id, const QString&) -> geck::resource::GameResources* {
+            asked << id;
+            return &sonora;
+        });
+    dialog.show();
+    auto* tree = dialog.findChild<QTreeView*>("bundledStampsTree");
+    REQUIRE(tree != nullptr);
+    auto* model = qobject_cast<QFileSystemModel*>(tree->model());
+    auto* grid = dialog.findChild<QListWidget*>();
+    REQUIRE(grid != nullptr);
+    const auto note = [&dialog]() {
+        for (auto* label : dialog.findChildren<QLabel*>()) {
+            if (!label->isHidden() && label->text().startsWith("Stamps from")) { // shown, even once accepted
+                return label->text();
+            }
+        }
+        return QString();
+    };
+
+    tree->setCurrentIndex(model->index(QDir(bundled).filePath("Sonora Stamps/Adobe")));
+    CHECK(asked == QStringList{ "sonora" });
+    CHECK(note().contains("Fallout: Sonora"));
+    CHECK(note().contains("Custom > From Fallout Sonora")); // the folder stamp-convert writes
+    REQUIRE(grid->count() > 0);
+    Q_EMIT grid->itemActivated(grid->item(0));
+    CHECK(dialog.selectedGameId() == "sonora");
+    CHECK(dialog.selectedPath().endsWith(".json"));
+    CHECK(dialog.selectedPattern().has_value());
+
+    tree->setCurrentIndex(model->index(QDir(bundled).filePath("Olympus Stamps")));
+    CHECK(asked == QStringList{ "sonora" }); // a game that isn't set up is never loaded
+    CHECK(note().contains("left out here"));
+
+    tree->setCurrentIndex(model->index(QDir(bundled).filePath("Fallout 2 Stamps/Adobe")));
+    CHECK(note().isEmpty()); // the map's own numbers: nothing to convert
+    REQUIRE(grid->count() > 0);
+    Q_EMIT grid->itemActivated(grid->item(0));
+    CHECK(dialog.selectedGameId().isEmpty());
 }

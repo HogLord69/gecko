@@ -387,6 +387,9 @@ def main() -> int:
         body = ["# Files deployed by tools/deploy.py. Used by --clean.",
                 "# Do not edit by hand.", *sorted(d.written)]
         (data / MANIFEST_NAME).write_text("\n".join(body) + "\n", encoding="utf-8")
+        # gecko's preview of pieces brought in since the last deploy (tools/gecko_assets.py, mounted on top
+        # of the mod while it exists): all of it is deployed now, and a stale copy would hide newer lists
+        shutil.rmtree(ROOT / "build" / "gecko_assets" / "overlay", ignore_errors=True)
 
     print(f"\ndeployed {len(d.written)} file(s) into {data}")
     if args.dry_run:

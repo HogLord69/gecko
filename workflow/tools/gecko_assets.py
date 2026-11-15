@@ -19,6 +19,9 @@ picture, mirrored and resized copies, names and examine text, and Apply New Art
     python tools/gecko_assets.py source NAME [--new]     (one game's data paths, as gecko mounts them;
                                                           --new: and the pieces Fallout 2 doesn't have)
     python tools/gecko_assets.py port SOURCE PID         (bring one of its pieces into the mod)
+    python tools/gecko_assets.py stamp-games             (which of gecko's stamp folders is which game's)
+    python tools/gecko_assets.py stamp-convert SOURCE STAMP.json
+                                                         (a copy in Custom/From <game>, converted)
 
 Every command but apply prints one JSON line last, {"ok": true, ...} or
 {"ok": false, "error": "..."}: that line is what gecko reads. apply runs in its
@@ -849,6 +852,98 @@ def build_overlay() -> list[str]:
     return written
 
 
+# Stamps that come with gecko (its stamps folder, "Came with gecko" in the Pattern Library). A stamp
+# holds its game's numbers, so the folders cut from another game draw the wrong pieces in this one.
+# gecko draws those folders with the game's own data (stamp-games says which game) and, when one is
+# picked, stamp-convert copies it into the user's own stamps (Custom/From <game>/...) and converts the
+# copy with port_stamp.py: pieces and tiles matched to the mod's or brought in. The files that brought
+# in go into the overlay, as for port, so the converted stamp draws right at once.
+
+STAMP_FOLDERS = {"Fallout 1 Stamps": "fo1", "Nevada Stamps": "nevada", "Olympus Stamps": "olympus",
+                 "Resurrection Stamps": "resurrection", "Sonora Stamps": "sonora"}
+NATIVE_STAMP_FOLDERS = ["Fallout 2 Stamps", "HogLord Props"]   # in Fallout 2's own numbers already
+
+
+def cmd_stamp_games(_args) -> dict:
+    from port import load_sources
+    srcs = load_sources()
+    folders = {}
+    for folder, sid in STAMP_FOLDERS.items():
+        entry = srcs.get(sid)
+        label = source_label(entry, sid) if entry else folder[: -len(" Stamps")]
+        why = left_out(entry) if entry else ("not set up here: run python setup.py in the workflow folder and "
+                                             "give it this game's folder")
+        folders[folder] = {"id": sid, "label": label, "available": why is None, "why": why or ""}
+    return {"folders": folders, "native": NATIVE_STAMP_FOLDERS}
+
+
+def mod_data_files() -> dict[str, tuple[int, int]]:
+    from port import MOD
+    data = MOD / "data"
+    out = {}
+    for root, _dirs, files in os.walk(data):
+        for f in files:
+            p = Path(root) / f
+            st = p.stat()
+            out[p.relative_to(data).as_posix()] = (st.st_size, st.st_mtime_ns)
+    return out
+
+
+def cmd_stamp_convert(args) -> dict:
+    import contextlib
+    import shutil
+    import port as portmod
+    import port_stamp
+
+    entry = portmod.load_sources().get(args.source)
+    if entry is None:
+        raise Refused(f"{args.source} isn't set up here: run python setup.py in the workflow folder and give it "
+                      f"that game's folder.")
+    label = source_label(entry, args.source)
+    why = left_out(entry)
+    if why:
+        raise Refused(f"{label}: {why}")
+    src = Path(args.stamp)
+    if not src.is_file():
+        raise Refused(f"No stamp at {src}.")
+    # Custom/From <game>/<the folders below "<Game> Stamps">/<name>.json
+    parts = src.parts
+    below = [i for i, p in enumerate(parts) if p.endswith(" Stamps")]
+    rel = Path(*parts[below[-1] + 1:]) if below else Path(src.name)
+    folder = "From " + re.sub(r'[<>:"/\\|?*]', "", label).strip()
+    dest = port_stamp.CUSTOM / folder / rel
+    notes: list[str] = []
+    fresh = not dest.is_file()
+    if fresh:
+        before = mod_data_files()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        old_argv = sys.argv
+        sys.argv = ["port_stamp.py", str(dest), "--source", args.source]
+        try:
+            with contextlib.redirect_stdout(sys.stderr):      # its report; the JSON line stays last
+                port_stamp.main()
+        except BaseException:
+            dest.unlink(missing_ok=True)                      # no half-made stamp left behind
+            raise
+        finally:
+            sys.argv = old_argv
+        after = mod_data_files()
+        files = sorted(f for f, sig in after.items() if before.get(f) != sig)
+        if files:
+            add_pending({"pid": "stamp", "name": dest.stem, "what": f"stamp from {label}", "files": files})
+    done = json.loads(dest.read_text(encoding="utf-8")).get("focConverted") or {}
+    if fresh and not done:
+        notes.append("It already matched your game, so nothing needed bringing in.")
+    if done.get("tilesSwapped"):
+        notes.append(f"{done['tilesSwapped']} floor tile(s) your game didn't have became the closest-looking ones.")
+    if done.get("objectsDropped"):
+        notes.append(f"{done['objectsDropped']} piece(s) couldn't be brought in and were left out.")
+    overlay = build_overlay()
+    return {"stamp": str(dest), "new": fresh, "label": label,
+            "overlay": str(OVERLAY) if overlay else "", "changed": overlay, "notes": notes}
+
+
 def cmd_port(args) -> dict:
     import contextlib
     import port as portmod
@@ -1267,6 +1362,10 @@ def main() -> int:
     p = sub.add_parser("port")
     p.add_argument("source")
     p.add_argument("pid", type=lambda s: int(s, 0))
+    sub.add_parser("stamp-games")
+    p = sub.add_parser("stamp-convert")
+    p.add_argument("source")
+    p.add_argument("stamp")
     for name in ("building-preview", "building-create"):
         p = sub.add_parser(name)
         p.add_argument("picture", type=Path)
@@ -1309,6 +1408,7 @@ def main() -> int:
                 "create": cmd_create, "mirror": cmd_mirror, "resize": cmd_resize,
                 "text": cmd_text, "pending": cmd_pending,
                 "sources": cmd_sources, "source": cmd_source, "port": cmd_port,
+                "stamp-games": cmd_stamp_games, "stamp-convert": cmd_stamp_convert,
                 "building-preview": cmd_building_preview, "building-create": cmd_building_create}
     try:
         result = {"ok": True, **handlers[args.cmd](args)}

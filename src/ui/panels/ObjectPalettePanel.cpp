@@ -227,6 +227,13 @@ bool ObjectPalettePanel::loadOtherGame(const QString& id, const QString& label) 
     return true;
 }
 
+resource::GameResources* ObjectPalettePanel::otherGameResources(const QString& id, const QString& label) {
+    if (!_otherGames.contains(id) && !loadOtherGame(id, label)) {
+        return nullptr;
+    }
+    return _otherGames.at(id).get();
+}
+
 resource::GameResources& ObjectPalettePanel::activeResources() const {
     if (!_activeGame.isEmpty()) {
         if (const auto found = _otherGames.find(_activeGame); found != _otherGames.end()) {

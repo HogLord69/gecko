@@ -1,5 +1,6 @@
 #include "ui/dialogs/PatternBrowserDialog.h"
 
+#include <QApplication>
 #include <QDir>
 #include <QDialogButtonBox>
 #include <QFile>
@@ -11,6 +12,7 @@
 #include <QIcon>
 #include <QLabel>
 #include <QListWidget>
+#include <QRegularExpression>
 #include <QPushButton>
 #include <QSplitter>
 #include <QTreeView>
@@ -20,12 +22,19 @@
 #include "pattern/PatternLibrary.h"
 #include "pattern/PatternSerializer.h"
 #include "pattern/PatternThumbnail.h"
+#include "ui/QtDialogs.h"
 
 namespace geck {
 
 namespace {
     constexpr int THUMBNAIL_SIZE = 96;
     constexpr int PATH_ROLE = Qt::UserRole + 1;
+
+    /// The folder a converted stamp goes in, under Custom: "From <game>", without the characters a
+    /// Windows folder name can't hold (gecko_assets.py stamp-convert names it the same way).
+    QString convertedFolder(const QString& label) {
+        return "From " + QString(label).remove(QRegularExpression(R"([<>:"/\\|?*])")).trimmed();
+    }
 
     std::optional<pattern::Pattern> loadPattern(const QString& path) {
         QFile file(path);
@@ -104,7 +113,12 @@ PatternBrowserDialog::PatternBrowserDialog(resource::GameResources& resources, Q
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     buttons->addButton(importButton, QDialogButtonBox::ActionRole);
 
+    _gameNote = new QLabel(this);
+    _gameNote->setWordWrap(true);
+    _gameNote->setVisible(false);
+
     auto* layout = new QVBoxLayout(this);
+    layout->addWidget(_gameNote);
     layout->addWidget(splitter, 1);
     layout->addWidget(buttons);
 
@@ -121,8 +135,32 @@ PatternBrowserDialog::PatternBrowserDialog(resource::GameResources& resources, Q
         _folderTree->setCurrentIndex(custom); // currentChanged fills the grid
         _folderTree->scrollTo(custom);
     } else {
-        populateGrid(root);
+        populateGrid(root, &_resources);
     }
+}
+
+void PatternBrowserDialog::setOtherGames(StampGamesProvider games, GameResourcesProvider resources) {
+    _stampGames = std::move(games);
+    _gameResources = std::move(resources);
+    _games.reset();
+}
+
+std::optional<PatternBrowserDialog::StampGame> PatternBrowserDialog::bundledGame(const QString& folder) {
+    const QString bundled = pattern::PatternLibrary::bundledDir();
+    if (!_stampGames || bundled.isEmpty()) {
+        return std::nullopt;
+    }
+    const QString below = QDir(bundled).relativeFilePath(QFileInfo(folder).canonicalFilePath());
+    const QString top = below.section('/', 0, 0);
+    if (!_games) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        _games = _stampGames();
+        QApplication::restoreOverrideCursor();
+    }
+    if (const auto found = _games->find(top); found != _games->end()) {
+        return found->second;
+    }
+    return std::nullopt;
 }
 
 PatternBrowserDialog::~PatternBrowserDialog() = default;
@@ -134,20 +172,39 @@ void PatternBrowserDialog::onFolderSelected(const QModelIndex& index) {
             _bundledTree->clearSelection();
             _bundledTree->setCurrentIndex({});
         }
-        populateGrid(_folderModel->filePath(index));
+        _currentGame.reset();
+        _gameNote->setVisible(false);
+        populateGrid(_folderModel->filePath(index), &_resources);
     }
 }
 
 void PatternBrowserDialog::onBundledFolderSelected(const QModelIndex& index) {
-    if (index.isValid()) {
-        const QSignalBlocker block(_folderTree->selectionModel());
-        _folderTree->clearSelection();
-        _folderTree->setCurrentIndex({});
-        populateGrid(_bundledModel->filePath(index));
+    if (!index.isValid()) {
+        return;
     }
+    const QSignalBlocker block(_folderTree->selectionModel());
+    _folderTree->clearSelection();
+    _folderTree->setCurrentIndex({});
+    const QString folder = _bundledModel->filePath(index);
+    _currentGame = bundledGame(folder);
+    resource::GameResources* resources = &_resources;
+    if (_currentGame) {
+        // Another game's numbers: drawn with that game's own data, or not at all.
+        resources = _currentGame->available && _gameResources ? _gameResources(_currentGame->id, _currentGame->label) : nullptr;
+        _gameNote->setText(resources
+                ? QString("Stamps from %1, drawn with its own data. Picking one copies it into your stamps (Custom > "
+                          "%2) with its pieces brought into your mod, so it stamps the same in your game.")
+                      .arg(_currentGame->label, convertedFolder(_currentGame->label))
+                : QString("Stamps from %1, which is in another game's numbers: %2.")
+                      .arg(_currentGame->label, _currentGame->available ? QString("it couldn't be read") : _currentGame->why));
+        _gameNote->setVisible(true);
+    } else {
+        _gameNote->setVisible(false);
+    }
+    populateGrid(folder, resources);
 }
 
-void PatternBrowserDialog::populateGrid(const QString& folder) {
+void PatternBrowserDialog::populateGrid(const QString& folder, resource::GameResources* resources) {
     _currentFolder = folder;
     _grid->clear();
 
@@ -163,8 +220,12 @@ void PatternBrowserDialog::populateGrid(const QString& folder) {
         auto* item = new QListWidgetItem(QFileInfo(file).completeBaseName(), _grid);
         item->setData(PATH_ROLE, path);
         item->setTextAlignment(Qt::AlignHCenter | Qt::AlignTop);
+        if (resources == nullptr) {
+            continue; // listed by name only: its numbers would draw the wrong pieces here
+        }
+        // The thumbnail cache is keyed by file: another game's data draws another picture.
         const QPixmap thumbnail = pattern::PatternThumbnail::forPattern(
-            *pattern, path, _resources, *_hexgrid, THUMBNAIL_SIZE);
+            *pattern, path, *resources, *_hexgrid, THUMBNAIL_SIZE);
         if (!thumbnail.isNull()) {
             item->setIcon(QIcon(thumbnail));
         }
@@ -180,7 +241,15 @@ void PatternBrowserDialog::onPatternActivated(QListWidgetItem* item) {
     if (!pattern.has_value()) {
         return;
     }
+    if (_currentGame && !_currentGame->available) {
+        QtDialogs::showWarning(this, "Pattern Library",
+            QString("This stamp is in %1's numbers, and %1 isn't set up here (%2), so it would stamp the wrong pieces.")
+                .arg(_currentGame->label, _currentGame->why));
+        return;
+    }
     _selected = std::move(pattern);
+    _selectedPath = path;
+    _selectedGame = _currentGame ? _currentGame->id : QString();
     accept();
 }
 
@@ -206,7 +275,7 @@ void PatternBrowserDialog::onImport() {
         QFile::remove(target);
         QFile::copy(source, target);
     }
-    populateGrid(_currentFolder);
+    populateGrid(_currentFolder, &_resources);
 }
 
 } // namespace geck

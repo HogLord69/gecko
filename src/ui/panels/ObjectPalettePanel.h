@@ -112,6 +112,9 @@ public:
     /// Drop every other game's data and textures; the palette goes back to the map's own game.
     void releaseOtherGames();
     [[nodiscard]] bool showingOtherGame() const { return !_activeGame.isEmpty(); }
+    /// Another game's data, loaded (as the Game list loads it) the first time it is asked for; null
+    /// after saying why it can't be read. The Pattern Library draws that game's stamps with it.
+    resource::GameResources* otherGameResources(const QString& id, const QString& label);
 
     // Initialization
     void loadObjects();

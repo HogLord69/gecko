@@ -501,6 +501,8 @@ class Converter:
         sp = self.src.proto(pid)
         if new_pid is not None and sp is not None and sp.fid == frm:
             fp = self.foc.proto(new_pid)
+            if fp is None:
+                self.notes.append(f"proto 0x{pid:08X} maps to 0x{new_pid:08X}, which the mod doesn't have")
             return fp.fid if fp is not None else None
         if frm in self.frm_map:
             return self.frm_map[frm]
