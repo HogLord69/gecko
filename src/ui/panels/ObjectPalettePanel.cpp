@@ -11,8 +11,11 @@
 #include "ui/common/BaseWidget.h"
 #include "ui/dragdrop/MimeTypes.h"
 #include "ui/theme/ThemeManager.h"
+#include "ui/QtDialogs.h"
 
+#include <QCheckBox>
 #include <QPainter>
+#include <QStandardItemModel>
 #include <QMouseEvent>
 #include <QApplication>
 #include <QStyle>
@@ -22,6 +25,25 @@
 #include <spdlog/spdlog.h>
 
 namespace geck {
+
+namespace {
+
+    // Lists the other games the first time it opens: asking the mod tools takes a moment, so it is
+    // not done for everyone who never looks.
+    class GamePickerCombo final : public QComboBox {
+    public:
+        using QComboBox::QComboBox;
+        std::function<void()> beforePopup;
+
+        void showPopup() override {
+            if (beforePopup) {
+                beforePopup();
+            }
+            QComboBox::showPopup();
+        }
+    };
+
+} // namespace
 
 ObjectPalettePanel::ObjectPalettePanel(resource::GameResources& resources, QWidget* parent)
     : BasePanel("Objects", parent)
@@ -57,6 +79,7 @@ void ObjectPalettePanel::setupUI() {
     _mainLayout->setSpacing(ui::constants::SPACING_TIGHT);
     _mainLayout->setContentsMargins(ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN, ui::constants::COMPACT_MARGIN);
 
+    setupGamePicker();
     setupCategoryTabs();
     setupSearchControls();
     setupObjectView();
@@ -66,6 +89,184 @@ void ObjectPalettePanel::setupUI() {
     _mainLayout->addWidget(_statusLabel);
 
     _mainLayout->addStretch();
+}
+
+void ObjectPalettePanel::setupGamePicker() {
+    auto* row = new QHBoxLayout();
+    row->addWidget(new QLabel("Game:", this));
+    auto* combo = new GamePickerCombo(this);
+    combo->setObjectName("gamePicker");
+    combo->addItem("This game", QString());
+    combo->setToolTip("Show another game's pieces. Dropping one on the map brings it into your mod first, "
+                      "with new numbers, so it works in your game.");
+    combo->beforePopup = [this]() {
+        if (!_gamesListed) {
+            listOtherGames();
+        }
+    };
+    _gameCombo = combo;
+    connect(_gameCombo, &QComboBox::currentIndexChanged, this, &ObjectPalettePanel::onGameChanged);
+    row->addWidget(_gameCombo, 1);
+    _mainLayout->addLayout(row);
+
+    _onlyNewCheck = new QCheckBox("Only pieces Fallout 2 doesn't have", this);
+    _onlyNewCheck->setObjectName("onlyNewPieces");
+    _onlyNewCheck->setChecked(true);
+    _onlyNewCheck->setToolTip("Leave out the pieces whose picture your own game already has: the Fallout 2 "
+                              "pieces every total conversion carries.");
+    _onlyNewCheck->setVisible(false);
+    connect(_onlyNewCheck, &QCheckBox::toggled, this, [this]() {
+        clearObjectSelection();
+        loadCategoryObjects(_currentCategory);
+        rebuildItems();
+    });
+    _mainLayout->addWidget(_onlyNewCheck);
+
+    _gameNote = new QLabel(this);
+    _gameNote->setWordWrap(true);
+    _gameNote->setStyleSheet(ui::theme::styles::italicSecondaryText());
+    _gameNote->setVisible(false);
+    _mainLayout->addWidget(_gameNote);
+}
+
+void ObjectPalettePanel::setOtherGameProviders(GameListProvider list, GameLayersProvider layers) {
+    _gameListProvider = std::move(list);
+    _gameLayersProvider = std::move(layers);
+    _gamesListed = false;
+}
+
+void ObjectPalettePanel::listOtherGames() {
+    QString note;
+    QList<OtherGame> games;
+    if (_gameListProvider) {
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        games = _gameListProvider(&note);
+        QApplication::restoreOverrideCursor();
+    } else {
+        note = "Other games come from a mod's tools; there are none here.";
+    }
+
+    const QSignalBlocker block(_gameCombo);
+    while (_gameCombo->count() > 1) {
+        _gameCombo->removeItem(_gameCombo->count() - 1);
+    }
+    for (const auto& game : games) {
+        _gameCombo->addItem(game.label, game.id);
+    }
+    if (games.isEmpty()) {
+        _gameCombo->addItem(note.isEmpty() ? QString("No other games") : note, QString());
+        if (auto* model = qobject_cast<QStandardItemModel*>(_gameCombo->model())) {
+            model->item(_gameCombo->count() - 1)->setEnabled(false);
+        }
+    }
+    _gamesListed = !games.isEmpty();
+}
+
+void ObjectPalettePanel::onGameChanged(int index) {
+    const QString id = _gameCombo->itemData(index).toString();
+    const QString label = _gameCombo->itemText(index);
+    if (!id.isEmpty() && !_otherGames.contains(id) && !loadOtherGame(id, label)) {
+        // Stay on the game that was showing.
+        const int previous = _gameCombo->findData(_activeGame);
+        const QSignalBlocker block(_gameCombo);
+        _gameCombo->setCurrentIndex(previous < 0 ? 0 : previous);
+        return;
+    }
+
+    _activeGame = id;
+    _gameNote->setText(QString("Pieces from %1. Drop one on the map to bring it into your mod: it gets new "
+                               "numbers, and Tools > Apply New Art puts it in the game.")
+                           .arg(label));
+    _gameNote->setVisible(!id.isEmpty());
+    _onlyNewCheck->setVisible(!id.isEmpty() && _newPieces.contains(id));
+
+    clearObjectSelection();
+    _objectsByCategory.clear();
+    loadCategoryObjects(_currentCategory);
+    rebuildItems();
+}
+
+bool ObjectPalettePanel::loadOtherGame(const QString& id, const QString& label) {
+    QString error;
+    std::vector<std::filesystem::path> layers;
+    std::optional<std::map<QString, std::set<int>>> newPieces;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    if (_gameLayersProvider) {
+        if (auto gameData = _gameLayersProvider(id, &error)) {
+            layers = std::move(gameData->layers);
+            if (!gameData->newPieces.empty()) {
+                newPieces = std::move(gameData->newPieces);
+            }
+        }
+    }
+    auto game = std::make_unique<resource::GameResources>();
+    try {
+        for (const auto& layer : layers) {
+            game->files().addDataPath(layer);
+        }
+    } catch (const std::exception& e) {
+        error = QString("Couldn't open %1's data: %2").arg(label, e.what());
+    }
+    QApplication::restoreOverrideCursor();
+
+    if (error.isEmpty() && layers.empty()) {
+        error = QString("The mod tools gave no data paths for %1.").arg(label);
+    }
+    if (error.isEmpty() && !game->files().exists("color.pal")) {
+        error = QString("%1's data has no color.pal, so its pieces can't be drawn.").arg(label);
+    }
+    if (!error.isEmpty()) {
+        QtDialogs::showWarning(this, "Other Game", error);
+        return false;
+    }
+    spdlog::info("ObjectPalettePanel: loaded {} ({} data paths) for the Game picker", label.toStdString(), layers.size());
+    _otherGames[id] = std::move(game);
+    if (newPieces) {
+        _newPieces[id] = std::move(*newPieces);
+    }
+    return true;
+}
+
+resource::GameResources* ObjectPalettePanel::otherGameResources(const QString& id, const QString& label) {
+    if (!_otherGames.contains(id) && !loadOtherGame(id, label)) {
+        return nullptr;
+    }
+    return _otherGames.at(id).get();
+}
+
+resource::GameResources& ObjectPalettePanel::activeResources() const {
+    if (!_activeGame.isEmpty()) {
+        if (const auto found = _otherGames.find(_activeGame); found != _otherGames.end()) {
+            return *found->second;
+        }
+    }
+    return _resources;
+}
+
+void ObjectPalettePanel::releaseOtherGames() {
+    clearObjectSelection();
+    if (!_activeGame.isEmpty()) {
+        _objectsByCategory.clear();
+        if (_model) {
+            _model->setItems({});
+        }
+        _activeGame.clear();
+        if (_gameCombo) {
+            const QSignalBlocker block(_gameCombo);
+            _gameCombo->setCurrentIndex(0);
+        }
+        if (_gameNote) {
+            _gameNote->setVisible(false);
+        }
+    }
+    for (auto& [id, game] : _otherGames) {
+        game->clearCaches(); // textures go while the GL context is still there
+    }
+    _otherGames.clear();
+    _newPieces.clear();
+    if (_onlyNewCheck) {
+        _onlyNewCheck->setVisible(false);
+    }
 }
 
 void ObjectPalettePanel::setupCategoryTabs() {
@@ -154,11 +355,12 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
 
     auto& targetList = getObjectList(category);
     targetList.clear();
+    resource::GameResources& resources = activeResources();
 
     try {
-        const auto* lst = _resources.repository().find<Lst>(lstPath.toStdString());
+        const auto* lst = resources.repository().find<Lst>(lstPath.toStdString());
         if (!lst) {
-            lst = _resources.repository().load<Lst>(lstPath.toStdString());
+            lst = resources.repository().load<Lst>(lstPath.toStdString());
         }
 
         if (!lst || lst->list().empty()) {
@@ -168,26 +370,42 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
 
         const auto& proFiles = lst->list();
         int loadedCount = 0;
+
+        // Another game, with "Only pieces Fallout 2 doesn't have": just the lines the mod tools named.
+        const std::set<int>* onlyLines = nullptr;
+        if (!_activeGame.isEmpty() && _onlyNewCheck && _onlyNewCheck->isChecked()) {
+            if (const auto game = _newPieces.find(_activeGame); game != _newPieces.end()) {
+                if (const auto lines = game->second.find(getCategoryDisplayName(category).toLower());
+                    lines != game->second.end()) {
+                    onlyLines = &lines->second;
+                }
+            }
+        }
         // Load ALL objects - no artificial limit
         int totalObjects = static_cast<int>(proFiles.size());
 
         for (int i = 0; i < totalObjects; ++i) {
+            if (onlyLines && !onlyLines->contains(i + 1)) {
+                continue;
+            }
             try {
                 const std::string& proFileName = proFiles[i];
                 QString qProFileName = QString::fromStdString(proFileName);
 
                 auto objectInfo = std::make_unique<ObjectInfo>(qProFileName, i);
+                objectInfo->resources = &resources;
+                objectInfo->sourceGame = _activeGame;
 
                 std::string proFilePath = categoryPath.toStdString() + "/" + proFileName;
 
-                objectInfo->pro = _resources.repository().load<Pro>(proFilePath);
+                objectInfo->pro = resources.repository().load<Pro>(proFilePath);
 
                 if (objectInfo->pro) {
                     objectInfo->displayName = protoDisplayName(*objectInfo->pro, qProFileName);
 
                     // Resolve the FRM path from the PRO's FID.
                     try {
-                        std::string frmPath = _resources.frmResolver().resolve(objectInfo->pro->header.FID);
+                        std::string frmPath = resources.frmResolver().resolve(objectInfo->pro->header.FID);
                         objectInfo->frmPath = QString::fromStdString(frmPath);
                     } catch (const std::exception& e) {
                         spdlog::debug("ObjectPalettePanel: Could not resolve FID for {}: {}",
@@ -221,7 +439,7 @@ QString ObjectPalettePanel::protoDisplayName(const Pro& pro, const QString& proF
     // getMessages().find(), not Msg::message(): that one is a map operator[] and inserts a blank
     // entry for a missing id, mutating the shared cached Msg.
     try {
-        if (const Msg* msg = ProHelper::msgFile(_resources, pro.type()); msg != nullptr) {
+        if (const Msg* msg = ProHelper::msgFile(activeResources(), pro.type()); msg != nullptr) {
             const auto& messages = msg->getMessages();
             const auto found = messages.find(static_cast<int>(pro.header.message_id));
             if (found != messages.end() && !found->second.text.empty()) {
@@ -291,7 +509,7 @@ QPixmap ObjectPalettePanel::createObjectThumbnail(const ObjectInfo* objectInfo, 
 
     if (objectInfo && !objectInfo->frmPath.isEmpty()) {
         try {
-            thumbnail = FrmThumbnailGenerator::fromFrmPath(_resources,
+            thumbnail = FrmThumbnailGenerator::fromFrmPath(objectInfo->resources ? *objectInfo->resources : _resources,
                 objectInfo->frmPath.toStdString(),
                 QSize(OBJECT_SIZE, OBJECT_SIZE));
             if (!thumbnail.isNull()) {
@@ -425,6 +643,11 @@ void ObjectPalettePanel::clearObjectSelection() {
 }
 
 std::optional<std::pair<int, ObjectCategory>> ObjectPalettePanel::revealProto(uint32_t pid) {
+    // A map object's PID is the map's own game's: show that game before looking it up.
+    if (showingOtherGame() && _gameCombo) {
+        _gameCombo->setCurrentIndex(0);
+    }
+
     ObjectCategory category;
     switch (Pro::typeOfPid(pid)) {
         case Pro::OBJECT_TYPE::ITEM:

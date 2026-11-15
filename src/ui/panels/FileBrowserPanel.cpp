@@ -11,6 +11,8 @@
 #include "ui/IconHelper.h"
 #include "ui/GameEnums.h"
 
+#include <QCheckBox>
+#include <QSettings>
 #include <QFileInfo>
 #include <QDir>
 #include <QHeaderView>
@@ -214,6 +216,7 @@ void FileLoaderWorker::loadFiles() {
 
             if (auto source = _resources->files().sourceInfo(file)) {
                 entry.source = QString::fromStdString(source->displayLabel);
+                entry.fromArchive = source->kind == resource::MountedSourceInfo::Kind::Dat;
             } else {
                 entry.source = QStringLiteral("Unknown");
             }
@@ -441,6 +444,18 @@ void FileBrowserPanel::setupFilterControls() {
 
     filterGroupLayout->addLayout(typeLayout);
 
+    // the mod's own files only: hides everything the .dat archives provide, so the map
+    // list is the mod's maps and not every vanilla Fallout 2 map as well
+    _looseOnlyCheckBox = new QCheckBox("Only the mod's own files (not the .dat archives)", this);
+    _looseOnlyCheckBox->setChecked(QSettings().value("fileBrowser/looseOnly", true).toBool());
+    _looseOnly = _looseOnlyCheckBox->isChecked();
+    connect(_looseOnlyCheckBox, &QCheckBox::toggled, this, [this](bool on) {
+        _looseOnly = on;
+        QSettings().setValue("fileBrowser/looseOnly", on);
+        buildFileTree(_allEntries);
+    });
+    filterGroupLayout->addWidget(_looseOnlyCheckBox);
+
     _mainLayout->addWidget(filterGroup);
 }
 
@@ -652,6 +667,10 @@ void FileBrowserPanel::buildFileTree(const std::vector<FileBrowserEntry>& entrie
         }
 
         if (_currentFileTypeFilter != "All Files" && entry.extension != _currentFileTypeFilter) {
+            continue;
+        }
+
+        if (_looseOnly && entry.fromArchive) {
             continue;
         }
 
@@ -879,6 +898,9 @@ void FileBrowserPanel::buildFileTreeProgressive(const std::vector<FileBrowserEnt
     std::vector<FileBrowserEntry> filteredEntries;
     for (const auto& entry : entries) {
         if (_currentFileTypeFilter != "All Files" && entry.extension != _currentFileTypeFilter) {
+            continue;
+        }
+        if (_looseOnly && entry.fromArchive) {
             continue;
         }
         filteredEntries.push_back(entry);

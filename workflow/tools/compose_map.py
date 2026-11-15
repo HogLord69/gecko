@@ -366,7 +366,7 @@ class Composer:
                 skipped += 1
                 continue
             lst = sc_art if t == 2 else wl_art if t == 3 else None
-            art = lst[o.fid & 0xFFF].lower() if lst and (o.fid & 0xFFF) < len(lst) else ""
+            art = lst[o.fid & 0xFFFFFF].lower() if lst and (o.fid & 0xFFFFFF) < len(lst) else ""
             if art and any(p.search(art) for p in drop):
                 continue
             if keep and not (art and any(p.search(art) for p in keep)):

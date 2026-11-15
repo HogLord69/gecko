@@ -224,11 +224,11 @@ std::unique_ptr<MapObject> createMapInventoryItem(resource::GameResources& resou
     item->position = 0;
     item->elevation = 0;
     item->direction = 0;
-    item->amount = static_cast<uint32_t>(amount);
     item->objects_in_inventory = 0;
     item->max_inventory_size = 0;
     item->inventory.clear();
     applyItemDefaults(*item, *pro);
+    setItemAmount(*item, *pro, static_cast<uint32_t>(amount)); // ammo: rounds
 
     return item;
 }

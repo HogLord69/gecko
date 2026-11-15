@@ -21,6 +21,7 @@ Checks:
   7  maps              every proto PID and script index inside a .map resolves
   8  worldmap          maps.txt/city.txt/map.msg registration is consistent
   9  quest log         mod/quests.txt entries resolve (map, GVAR, quests.msg)
+ 10  dialogue          speakers over the limits of docs/DIALOGUE_GUIDE.md (a warning)
 
 Exit code 0 only if there are no errors.
 """
@@ -28,6 +29,7 @@ Exit code 0 only if there are no errors.
 from __future__ import annotations
 
 import argparse
+import bisect
 import re
 import sys
 from collections import Counter, defaultdict
@@ -253,6 +255,10 @@ def check_art(gi, rep):
         base_long = 0
         foc_missing = 0
         checked = 0
+        # the loose art folder, listed once: the names in upper case, sorted,
+        # so "is there a file that starts with this name" is one bisect
+        art_folder = MOD / "data" / "art" / art_dir
+        loose = sorted(p.name.upper() for p in art_folder.iterdir() if p.is_file()) if art_folder.is_dir() else []
         for i, entry in enumerate(full):
             if not entry or entry == ids_mod.FILLER["art"]:
                 continue
@@ -279,12 +285,8 @@ def check_art(gi, rep):
                 else:
                     base_long += 1
                 continue
-            local = MOD / "data" / "art" / art_dir / name
-            ok_local = local.is_file() or any(
-                p.name.upper().startswith(name.upper())
-                for p in (MOD / "data" / "art" / art_dir).glob(f"{name}*")
-                if p.is_file()
-            )
+            at = bisect.bisect_left(loose, name.upper())
+            ok_local = at < len(loose) and loose[at].startswith(name.upper())
             ok_vfs = gi.vfs.exists(f"art\\{art_dir}\\{name}")
             if not ok_vfs and not ok_local:
                 # critter family: probe for the first frame letter pair
@@ -626,6 +628,20 @@ def check_questlog(gi, rep):
 
 # -------------------------------------------------------------------------- main
 
+def check_dialogue(rep):
+    """Speakers who open too many lines with a stage direction, or run long (docs/DIALOGUE_GUIDE.md)."""
+    rep.section("10 dialogue")
+    try:
+        import dialogue_check
+    except ImportError:
+        rep.ok("no dialogue tools: dialogue checks skipped (a maps-only mod)")
+        return
+    over = dialogue_check.flagged()
+    if over:
+        rep.warn(f"dialogue: {len(over)} speaker(s) over the limits of docs/DIALOGUE_GUIDE.md "
+                 f"(python tools/dialogue_check.py): " + ", ".join(over))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--verbose", action="store_true")
@@ -648,6 +664,7 @@ def main() -> int:
     check_maps(gi, gi_full, rep)
     check_worldmap(gi, rep)
     check_questlog(gi, rep)
+    check_dialogue(rep)
 
     print()
     for w in rep.warnings:

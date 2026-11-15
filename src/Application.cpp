@@ -23,11 +23,13 @@
 #include "ui/Settings.h"
 #include "ui/QtDialogs.h"
 #include "ui/core/MainWindow.h"
+#include "ui/assets/ModToolsRunner.h"
 #include "ui/core/EditorWidget.h"
 #include "ui/widgets/LoadingWidget.h"
 #include "ui/dialogs/SettingsDialog.h"
 #include "state/loader/DataPathLoader.h"
 #include "ui/panels/FileBrowserPanel.h"
+#include "ui/panels/ObjectPalettePanel.h"
 
 namespace geck {
 
@@ -38,7 +40,7 @@ Application::Application(int argc, char** argv)
     , _resources(std::make_shared<resource::GameResources>()) {
 
     _qtApp->setApplicationName(geck::version::name);
-    _qtApp->setApplicationDisplayName(geck::version::name);
+    _qtApp->setApplicationDisplayName(geck::version::displayName);
     _qtApp->setApplicationVersion(geck::version::string);
 
     // Mirror every log record into the Log panel's model from here on, so load-time warnings
@@ -168,6 +170,10 @@ Application::~Application() {
     }
     if (_mainWindow) {
         _mainWindow->stopGameLoop();
+        // Other games shown in the object palette hold textures of their own.
+        if (auto* palette = _mainWindow->getObjectPalettePanel()) {
+            palette->releaseOtherGames();
+        }
     }
     // OpenGL textures must be destroyed while the OpenGL context is still valid;
     // without this we get mutex/context crash during static destruction
@@ -234,16 +240,13 @@ void Application::checkDataConfiguration() {
     if (!settings.exists()) {
         spdlog::info("First run detected, showing settings dialog");
         showStartupSettingsDialog();
-        loadDataPaths();
-        _mainWindow->startThumbnailPrewarm();
-        return;
     }
 
     loadDataPaths();
 
-    // Settings exist, but the configured paths no longer provide the files the editor can't
-    // run without (the game install moved or was deleted since the last run). Prompt once with
-    // the same dialog as on first run, then remount whatever the user configured.
+    // The configured paths do not provide the files the editor can't run without: the first-run
+    // dialog was closed without a game, or the install moved or was deleted since the last run.
+    // Prompt once more with the same dialog, then remount whatever the user configured.
     if (!hasEssentialGameData()) {
         spdlog::warn("Configured data paths are missing essential game files, showing settings dialog");
         if (showStartupSettingsDialog()) {
@@ -292,6 +295,21 @@ void Application::loadDataPaths() {
     auto& settings = *_settings;
     auto dataPaths = settings.getDataPaths();
 
+    // No data path gives gecko a game, but the Game Location names an install: read the game from
+    // there, listed as Add Path would list it. Filling in the Game Location (it sits right under the
+    // data paths in Preferences, and only drives the Play button) instead of adding a data path is
+    // the easiest first-run mistake there is. Kept in memory only, like the --data fallback below;
+    // the Preferences dialog saves it with everything else.
+    if (!_cliDataPathOverride && (dataPaths.empty() || isPlaceholderOnlyDataPaths(dataPaths))) {
+        const auto gamePaths = util::gameLocationDataPaths(settings.getGameLocation());
+        if (!gamePaths.empty()) {
+            spdlog::warn("loadDataPaths - no data path holds a game; reading the Game Location's install: {}",
+                QString::fromStdU16String(gamePaths.back().u16string()).toStdString());
+            dataPaths = util::withBaseGameDataPaths(dataPaths, gamePaths, getResourcesPath());
+            settings.setDataPaths(dataPaths);
+        }
+    }
+
     if (dataPaths.empty()) {
         spdlog::warn("No data paths configured, application may not function properly");
         return;
@@ -337,11 +355,12 @@ void Application::loadDataPaths() {
                           "bundled resources folder instead of a real game install, and no "
                           "--data argument was given to fall back to - not mounting.",
                 dataPaths.size());
-            QtDialogs::showError(_mainWindow.get(), "Data Configuration Problem",
-                "gecko's data paths appear to have reset to its own bundled placeholder data "
-                "instead of your real game install, and no --data argument was given to recover "
-                "with.\n\nNothing has been loaded. Please close gecko and launch it with "
-                "--data \"<path to your Fallout 2 install>\".");
+            QtDialogs::showError(_mainWindow.get(), "No Game Data Yet",
+                "gecko has no game to read: its only data path is its own resources folder.\n\n"
+                "In Preferences (it opens next, or File > Preferences), press Add Path..., then "
+                "Add Folder..., and choose your Fallout 2 folder, the one with master.dat in it. "
+                "Filling in the Game Location below the data paths works too.\n\n"
+                "Starting gecko with --data \"<your Fallout 2 folder>\" also works.");
             return;
         }
     }
@@ -350,6 +369,19 @@ void Application::loadDataPaths() {
     // folder, not in the game data — keep it mounted (lowest priority) regardless of how the
     // user configured the data paths, or every map load fails on art/tiles/blank.frm.
     util::ensureFallbackDataPath(dataPaths, getResourcesPath());
+
+    // Pieces and stamps brought in from other games since the mod was last deployed live in the mod
+    // tools' overlay (gecko_assets.py) until a deploy removes it: on top, so they draw after a restart
+    // too. In memory only, never saved as a data path.
+    if (const auto toolsRoot = ModToolsRunner::resolveRoot(settings.getModToolsRoot()); !toolsRoot.empty()) {
+        const auto overlay = toolsRoot / "build" / "gecko_assets" / "overlay";
+        std::error_code ec;
+        if (std::filesystem::is_directory(overlay, ec)) {
+            spdlog::info("Mounting the mod tools' overlay (not deployed yet): {}",
+                QString::fromStdU16String(overlay.u16string()).toStdString());
+            dataPaths.push_back(overlay);
+        }
+    }
 
     spdlog::info("Loading {} data paths with progress dialog", dataPaths.size());
     for (const auto& path : dataPaths) {

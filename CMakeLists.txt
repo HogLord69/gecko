@@ -23,6 +23,8 @@ if(NOT CMAKE_CONFIGURATION_TYPES)
     # owns the copy and consumers depend on it instead of duplicating it. (Single-config only;
     # multi-config generators keep their per-target, per-config copies below.)
     add_custom_target(copy_runtime_resources ALL
+        # the stamps are mirrored, not added to: a stamp folder renamed in the source must not linger here
+        COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/resources/stamps
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources ${CMAKE_BINARY_DIR}/resources
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/scripts ${CMAKE_BINARY_DIR}/resources/scripts
         COMMENT "Staging resources + scripts into the build tree"

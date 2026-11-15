@@ -188,6 +188,8 @@ public:
 
     // Object placement functionality
     void placeObjectAtPosition(sf::Vector2f worldPos) override;
+    /// Place one object of `pro` (its art at `frmPath`, in the map's data) on a hex, as one undo step.
+    void placeProtoAt(int hexPosition, int placementDirection, const Pro& pro, const QString& frmPath);
 
     // Eyedropper (P): sample the topmost object/tile under the cursor and load it into its palette.
     // A tile arms tile painting; an object arms click-to-place via beginObjectPlacement().

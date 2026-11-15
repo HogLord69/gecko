@@ -6,6 +6,7 @@ camera stops at the edge of the painted ground and the void beyond is never seen
     python tools/map_edges.py --preview build/edges       # renders with the boxes drawn on, nothing written
     python tools/map_edges.py                             # write mod/data/maps/*.edg (+ the deployed copies)
     python tools/map_edges.py Clairemont.map CLCAMP.MAP   # only these maps
+    python tools/map_edges.py CLCOURT.MAP --box 0:2605,-408,5411,1236   # a box picked by hand
 
 Why: at the original 640x480 a ring of scroll blockers (misc proto 12) keeps the
 camera in, but we run 1920x1080 at 2x through Mash's Hi-Res Patch, whose view is
@@ -42,6 +43,12 @@ tools/rock_field.py then lays the originals' rock field under it (which does not
 count as walkable ground here, so a re-run gives the same box). The report says how
 much of the visible walkable ground and how many visible exit hexes are left
 outside the box, and how much void is inside it; the preview tints that void red.
+
+--box E:x0,y0,x1,y1 sets elevation E's box by hand instead (engine screen px, as
+tileToScreenXY and exit_layout.py give them), for the maps the owner wants cut down
+to one part (2026-10-29: "make the court house map just the court house", "shrink
+map edges on the drivein map") and for a floor whose walls the search clips (the
+drive-in's projector booth). tools/exit_layout.py then lays the exits on it.
 """
 
 from __future__ import annotations
@@ -80,7 +87,7 @@ VOID_COST = 2.0                # per cell of void, at ground level
 INSIDE_VOID_COST = 0.1         # per cell of void, on the floors above and below
 # maps underground on every floor (the vaults and caves in the originals): the
 # rooms stand in the void at ground level too, so it costs INSIDE_VOID_COST there
-UNDERGROUND = {"RWFAC1.MAP", "RWFAC2.MAP", "RWFAC3.MAP"}
+UNDERGROUND = {"RWFAC1.MAP", "RWFAC2.MAP", "RWFAC3.MAP", "LAMBUNK.MAP"}
 UNDERGROUND_PAD = (8, 4)       # cells kept round the walkable ground there: above (walls rise), elsewhere
 ROCK_FIELD = ("cav4009.frm", "cav4010.frm")   # the rock round underground rooms (tools/rock_field.py)
 VIEW = (960, 540)              # what one screen shows: 1920x1080 at SCALE_2X
@@ -367,7 +374,15 @@ def main() -> int:
     ap.add_argument("--preview", metavar="DIR")
     ap.add_argument("--dir", type=Path, help="work on the maps in this folder (a layout being built), "
                                              "not mod/data/maps and the deployed copies")
+    ap.add_argument("--box", action="append", default=[], metavar="E:x0,y0,x1,y1",
+                    help="elevation E's box by hand, in engine screen px (with one map named)")
     args = ap.parse_args()
+    boxes = {}
+    for b in args.box:
+        e, _, xy = b.partition(":")
+        boxes[int(e)] = [int(v) for v in xy.split(",")]
+    if boxes and len(args.maps) != 1:
+        sys.exit("--box needs exactly one map named")
     global AUTH, DEPL
     if args.dir:
         AUTH, DEPL = args.dir, args.dir / "_no_deployed_copy"
@@ -393,6 +408,13 @@ def main() -> int:
         print(name)
         for e in (0, 1, 2):
             fl = m.floors[m.elevations.index(e)] if e in m.elevations else None
+            if e in boxes:
+                x0, y0, x1, y1 = (v + GECKO_OFFSET[i % 2] for i, v in enumerate(boxes[e]))
+                hexes = range(W * W)
+                zones[e] = (hex_for(x0, 0, +1, hexes), hex_for(y0, 1, +1, hexes),
+                            hex_for(x1, 0, -1, hexes), hex_for(y1, 1, -1, hexes))
+                print(f"   e{e}: zone {zones[e]}  by hand, {x1 - x0}x{y1 - y0} px")
+                continue
             if fl is None or not any(v > 1 for v in fl):
                 zones[e] = FULL_GRID
                 continue

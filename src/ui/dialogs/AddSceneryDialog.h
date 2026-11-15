@@ -37,6 +37,8 @@ class AddSceneryDialog : public QDialog {
 
 public:
     explicit AddSceneryDialog(ModToolsRunner* runner, QWidget* parent = nullptr);
+    /// Open a picture as Choose... does, without the file dialog (the README shots use it).
+    void loadPicture(const QString& path);
 
     /// How many pieces this dialog made (the caller says so when it closes).
     [[nodiscard]] int piecesMade() const { return _piecesMade; }
@@ -50,7 +52,6 @@ protected:
 private:
     void setupUI();
     void choosePicture();
-    void loadPicture(const QString& path);
     void pickStandPoint(const QPoint& labelPos);
     void drawSourceView();
     void schedulePreview();

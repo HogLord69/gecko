@@ -9,6 +9,7 @@
 #include <QHBoxLayout>
 #include <QLineEdit>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QPushButton>
 #include <QLabel>
 #include <QHeaderView>
@@ -45,6 +46,7 @@ struct FileBrowserEntry {
     QString normalizedPath; //!< display path, relative to its providing mount
     QString extension;      //!< lowercase ".ext", empty when the file has none
     QString source;         //!< display label of the mount that provides the file
+    bool fromArchive = false; //!< provided by a .dat (the game's or another mod's), not a loose folder
 };
 
 /**
@@ -224,6 +226,8 @@ private:
     QLineEdit* _searchLineEdit = nullptr;
     QComboBox* _fileTypeComboBox = nullptr;
     QPushButton* _refreshButton = nullptr;
+    QCheckBox* _looseOnlyCheckBox = nullptr; //!< hide what the .dat archives provide (the vanilla maps)
+    bool _looseOnly = false;
 
     // Tree view
     QTreeView* _treeView = nullptr;

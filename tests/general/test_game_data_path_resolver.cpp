@@ -377,3 +377,135 @@ TEST_CASE("ensureFallbackDataPath skips a fallback directory that does not exist
     geck::util::ensureFallbackDataPath(paths, tmp.root / "no_such_dir");
     REQUIRE(paths.size() == 1);
 }
+
+// =============================================================================
+// First-run setup: the Game Location as game data, and Steam libraries on other drives
+// =============================================================================
+
+TEST_CASE("providesGameData: a master.dat entry or a folder of loose game data, not a folder holding a DAT", "[paths]") {
+    TempDir tmp;
+    const auto game = tmp.root / "Fallout 2";
+    createFallout2DataLayout(game);
+    const auto resources = tmp.root / "gecko" / "resources";
+    touchFile(resources / "art" / "tiles" / "blank.frm");
+
+    REQUIRE_FALSE(geck::util::providesGameData({}));
+    REQUIRE_FALSE(geck::util::providesGameData({ resources }));
+    // DataFileSystem mounts a folder's loose files only; its master.dat is an entry of its own.
+    REQUIRE_FALSE(geck::util::providesGameData({ resources, game }));
+    REQUIRE(geck::util::providesGameData({ resources, game / "master.dat", game }));
+    REQUIRE_FALSE(geck::util::providesGameData({ tmp.root / "gone" / "master.dat" }));
+
+    const auto extracted = tmp.root / "extracted";
+    touchFile(extracted / "color.pal");
+    touchFile(extracted / "art" / "tiles" / "tiles.lst");
+    REQUIRE(geck::util::providesGameData({ resources, extracted }));
+}
+
+TEST_CASE("gameLocationDataPaths lists an install the way Add Path does, from any of its spellings", "[paths]") {
+    TempDir tmp;
+    const auto game = tmp.root / "Fallout 2";
+    createFallout2DataLayout(game);
+    touchFile(game / "fallout2.exe");
+    const std::vector<std::filesystem::path> expected { game / "master.dat", game / "critter.dat", game };
+
+    REQUIRE(geck::util::gameLocationDataPaths(game) == expected);
+    REQUIRE(geck::util::gameLocationDataPaths(game / "data") == expected);
+    REQUIRE(geck::util::gameLocationDataPaths(game / "fallout2.exe") == expected);
+
+    REQUIRE(geck::util::gameLocationDataPaths({}).empty());
+    REQUIRE(geck::util::gameLocationDataPaths(tmp.root / "nowhere").empty());
+    const auto modOnly = tmp.root / "mod";
+    mkdirs(modOnly / "data");
+    REQUIRE(geck::util::gameLocationDataPaths(modOnly).empty()); // no master.dat: not a game
+}
+
+TEST_CASE("withBaseGameDataPaths puts the game above the bundled resources and below everything else", "[paths]") {
+    const std::filesystem::path resources = "E:/gecko/resources";
+    const std::filesystem::path mod = "D:/mods/foc";
+    const std::vector<std::filesystem::path> game { "D:/Fallout 2/master.dat", "D:/Fallout 2/critter.dat", "D:/Fallout 2" };
+
+    // Spelled the way the friend's settings had it: mixed separators.
+    const std::vector<std::filesystem::path> start { "E:/gecko\\resources", mod };
+    const auto out = geck::util::withBaseGameDataPaths(start, game, resources);
+    REQUIRE(out == std::vector<std::filesystem::path> { "E:/gecko\\resources", game[0], game[1], game[2], mod });
+
+    // Nothing listed twice when part of the game is there already.
+    const auto again = geck::util::withBaseGameDataPaths({ resources, game[2] }, game, resources);
+    REQUIRE(again == std::vector<std::filesystem::path> { resources, game[0], game[1], game[2] });
+
+    // A folder whose name only starts like the resources folder is not inside it.
+    const auto lookalike = geck::util::withBaseGameDataPaths({ "E:/gecko/resources-old" }, game, resources);
+    REQUIRE(lookalike.front() == game[0]);
+}
+
+TEST_CASE("parseSteamLibraryFolders reads the current libraryfolders.vdf", "[paths][steam]") {
+    const std::string vdf = R"("libraryfolders"
+{
+	"0"
+	{
+		"path"		"C:\\Program Files (x86)\\Steam"
+		"label"		""
+		"apps"
+		{
+			"228980"		"1"
+		}
+	}
+	"1"
+	{
+		"path"		"D:\\SteamLibrary"
+		"apps"
+		{
+			"38410"		"6"
+		}
+	}
+}
+)";
+    const auto folders = geck::util::parseSteamLibraryFolders(vdf);
+    REQUIRE(folders == std::vector<std::filesystem::path> { "C:\\Program Files (x86)\\Steam", "D:\\SteamLibrary" });
+}
+
+TEST_CASE("parseSteamLibraryFolders reads the pre-2021 libraryfolders.vdf", "[paths][steam]") {
+    const std::string vdf = R"("LibraryFolders"
+{
+	"TimeNextStatsReport"		"1612345678"
+	"ContentStatsID"		"-1234567890"
+	"1"		"D:\\SteamLibrary"
+	"2"		"E:\\Games\\Steam \"Two\""
+}
+)";
+    const auto folders = geck::util::parseSteamLibraryFolders(vdf);
+    REQUIRE(folders == std::vector<std::filesystem::path> { "D:\\SteamLibrary", "E:\\Games\\Steam \"Two\"" });
+    REQUIRE(geck::util::parseSteamLibraryFolders("").empty());
+    REQUIRE(geck::util::parseSteamLibraryFolders("\"libraryfolders\" { \"0\" {").empty());
+}
+
+TEST_CASE("steamLibraryFolders finds a Fallout 2 in a library on another drive", "[paths][steam]") {
+    TempDir tmp;
+    const auto steam = tmp.root / "Steam";
+    const auto library = tmp.root / "SteamLibrary";
+    const auto game = library / "steamapps" / "common" / "Fallout 2";
+    createFallout2DataLayout(game);
+    mkdirs(steam / "steamapps");
+    {
+        std::string escaped;
+        for (const char ch : library.u8string()) {
+            if (ch == '\\') {
+                escaped += "\\\\";
+            } else {
+                escaped += static_cast<char>(ch);
+            }
+        }
+        std::ofstream vdf(steam / "steamapps" / "libraryfolders.vdf", std::ios::binary);
+        vdf << "\"libraryfolders\"\n{\n\t\"0\"\n\t{\n\t\t\"path\"\t\t\"" << escaped << "\"\n\t}\n}\n";
+    }
+
+    const auto folders = geck::util::steamLibraryFolders(steam);
+    REQUIRE(folders.size() == 2);
+    REQUIRE(folders[0] == steam);
+    REQUIRE(std::filesystem::equivalent(folders[1], library));
+    REQUIRE(geck::util::hasFallout2DataLayout(folders[1] / "steamapps" / "common" / "Fallout 2"));
+
+    // A Steam install with no library file is still its own library.
+    REQUIRE(geck::util::steamLibraryFolders(library) == std::vector<std::filesystem::path> { library });
+}

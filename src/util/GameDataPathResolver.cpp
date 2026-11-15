@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <fstream>
+#include <sstream>
 
 namespace geck::util {
 
@@ -178,6 +180,177 @@ void ensureFallbackDataPath(std::vector<std::filesystem::path>& paths, const std
         // Data Paths table displays the list reversed) — so lowest priority means the FRONT.
         paths.insert(paths.begin(), fallbackDir);
     }
+}
+
+namespace {
+
+    std::string lowered(std::string text) {
+        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        return text;
+    }
+
+    // A path as UTF-8 with forward slashes, lower case and no trailing slash. Case and separators
+    // differ between spellings of one folder ("E:/gecko\resources", "e:\gecko\resources/"), and
+    // path::string() would go through the ANSI code page and throw on a name it cannot hold.
+    std::string comparisonKey(const std::filesystem::path& path) {
+        const std::u8string utf8 = path.lexically_normal().generic_u8string();
+        std::string key = lowered(std::string(utf8.begin(), utf8.end()));
+        while (key.size() > 1 && key.back() == '/') {
+            key.pop_back();
+        }
+        return key;
+    }
+
+    bool isMasterDat(const std::filesystem::path& path) {
+        const std::u8string name = path.filename().u8string();
+        return lowered(std::string(name.begin(), name.end())) == "master.dat" && isRegularFile(path);
+    }
+
+    bool hasLooseGameData(const std::filesystem::path& directory) {
+        const std::filesystem::path loose = looseDataDirectory(directory);
+        return isRegularFile(loose / "color.pal") && isRegularFile(loose / "art" / "tiles" / "tiles.lst");
+    }
+
+    bool isInside(const std::filesystem::path& path, const std::filesystem::path& directory) {
+        if (directory.empty()) {
+            return false;
+        }
+        const std::string p = comparisonKey(path);
+        const std::string d = comparisonKey(directory);
+        return p == d || (p.size() > d.size() && p.compare(0, d.size(), d) == 0 && p[d.size()] == '/');
+    }
+
+    bool listed(const std::vector<std::filesystem::path>& paths, const std::filesystem::path& candidate) {
+        const std::string key = comparisonKey(candidate);
+        return std::any_of(paths.begin(), paths.end(), [&key](const std::filesystem::path& existing) {
+            return comparisonKey(existing) == key;
+        });
+    }
+
+    // One "quoted string" token of a VDF file, or a brace. Steam escapes a backslash and a quote
+    // with a backslash; anything else after a backslash is kept as written.
+    struct VdfToken {
+        char kind; // 's' string, '{' or '}'
+        std::string text;
+    };
+
+    std::vector<VdfToken> tokenizeVdf(const std::string& text) {
+        std::vector<VdfToken> tokens;
+        for (std::size_t i = 0; i < text.size(); ++i) {
+            const char ch = text[i];
+            if (ch == '{' || ch == '}') {
+                tokens.push_back({ ch, {} });
+            } else if (ch == '/' && i + 1 < text.size() && text[i + 1] == '/') {
+                while (i < text.size() && text[i] != '\n') {
+                    ++i;
+                }
+            } else if (ch == '"') {
+                std::string value;
+                for (++i; i < text.size() && text[i] != '"'; ++i) {
+                    if (text[i] == '\\' && i + 1 < text.size() && (text[i + 1] == '\\' || text[i + 1] == '"')) {
+                        ++i;
+                    }
+                    value.push_back(text[i]);
+                }
+                tokens.push_back({ 's', std::move(value) });
+            }
+        }
+        return tokens;
+    }
+
+    bool isAllDigits(const std::string& text) {
+        return !text.empty() && std::all_of(text.begin(), text.end(), [](unsigned char ch) { return std::isdigit(ch) != 0; });
+    }
+
+    std::filesystem::path fromUtf8(const std::string& text) {
+        return std::filesystem::path(std::u8string(text.begin(), text.end()));
+    }
+
+} // namespace
+
+bool providesGameData(const std::vector<std::filesystem::path>& dataPaths) {
+    return std::any_of(dataPaths.begin(), dataPaths.end(), [](const std::filesystem::path& path) {
+        return isMasterDat(path) || (isDirectory(path) && hasLooseGameData(path));
+    });
+}
+
+std::vector<std::filesystem::path> gameLocationDataPaths(const std::filesystem::path& location) {
+    if (location.empty()) {
+        return {};
+    }
+    // The Game Location's executable field names fallout2.exe; its install is the folder it sits in.
+    const std::filesystem::path folder = isRegularFile(location) ? location.parent_path() : location;
+    const auto root = resolveGameDataRoot(folder);
+    if (!root || hasDatExtension(*root) || !isRegularFile(*root / "master.dat")) {
+        return {};
+    }
+    return expandDataPaths({ *root });
+}
+
+std::vector<std::filesystem::path> withBaseGameDataPaths(const std::vector<std::filesystem::path>& dataPaths,
+    const std::vector<std::filesystem::path>& gamePaths, const std::filesystem::path& resourcesDir) {
+    std::vector<std::filesystem::path> out;
+    std::size_t next = 0;
+    while (next < dataPaths.size() && isInside(dataPaths[next], resourcesDir)) {
+        out.push_back(dataPaths[next++]);
+    }
+    for (const auto& gamePath : gamePaths) {
+        if (!listed(dataPaths, gamePath) && !listed(out, gamePath)) {
+            out.push_back(gamePath);
+        }
+    }
+    out.insert(out.end(), dataPaths.begin() + static_cast<std::ptrdiff_t>(next), dataPaths.end());
+    return out;
+}
+
+std::vector<std::filesystem::path> parseSteamLibraryFolders(const std::string& vdfText) {
+    const std::vector<VdfToken> tokens = tokenizeVdf(vdfText);
+    std::vector<std::filesystem::path> folders;
+    int depth = 0;
+    for (std::size_t i = 0; i < tokens.size(); ++i) {
+        if (tokens[i].kind == '{') {
+            ++depth;
+            continue;
+        }
+        if (tokens[i].kind == '}') {
+            --depth;
+            continue;
+        }
+        if (i + 1 >= tokens.size() || tokens[i + 1].kind != 's') {
+            continue; // the name of a block: its '{' comes next
+        }
+        const std::string& key = tokens[i].text;
+        const std::string& value = tokens[i + 1].text;
+        ++i;
+        // Since 2021: "libraryfolders" { "0" { "path" "D:\\SteamLibrary" ... } }.
+        // Before: "LibraryFolders" { "TimeNextStatsReport" "..." "1" "D:\\SteamLibrary" }.
+        const bool current = depth == 2 && lowered(key) == "path";
+        const bool older = depth == 1 && isAllDigits(key);
+        if ((current || older) && !value.empty() && !listed(folders, fromUtf8(value))) {
+            folders.push_back(fromUtf8(value));
+        }
+    }
+    return folders;
+}
+
+std::vector<std::filesystem::path> steamLibraryFolders(const std::filesystem::path& steamInstall) {
+    std::vector<std::filesystem::path> folders;
+    if (steamInstall.empty()) {
+        return folders;
+    }
+    folders.push_back(steamInstall);
+    std::ifstream file(steamInstall / "steamapps" / "libraryfolders.vdf", std::ios::binary);
+    if (!file) {
+        return folders;
+    }
+    std::ostringstream text;
+    text << file.rdbuf();
+    for (const auto& folder : parseSteamLibraryFolders(text.str())) {
+        if (!listed(folders, folder)) {
+            folders.push_back(folder);
+        }
+    }
+    return folders;
 }
 
 } // namespace geck::util

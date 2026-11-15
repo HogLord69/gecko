@@ -11,7 +11,7 @@ map-format work itself: it serialises the grid into a Luau table and emits a
 generic interpreter that drives `gecko-cli map generate` through the documented
 `api:` surface (reference/gecko/src/scripting/ScriptApiReference.h). Proto and
 tile ids are resolved by name at generation time, never hard-coded here - the
-one reliable way per HANDOFF 7.11.
+one reliable way.
 
 Output goes to build/<name>/ only. This does NOT register the map with the
 engine (no maps.txt / worldmap / header script); that is a separate step.

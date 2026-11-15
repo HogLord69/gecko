@@ -244,15 +244,18 @@ void DragDropManager::startDragPreview(int objectIndex, int categoryInt, sf::Vec
 
         if (_previewObjectInfo) {
             try {
+                // The entry's own game draws the ghost: a piece from another game in the palette's
+                // Game list has its art there, not in the map's data (it is brought in on the drop).
+                auto& resources = _previewObjectInfo->resources ? *_previewObjectInfo->resources : _context.resources();
                 std::string frmPath = _previewObjectInfo->frmPath.toStdString();
-                auto frm = _context.resources().repository().find<Frm>(frmPath);
+                auto frm = resources.repository().find<Frm>(frmPath);
                 if (!frm) {
-                    frm = _context.resources().repository().load<Frm>(frmPath);
+                    frm = resources.repository().load<Frm>(frmPath);
                 }
 
                 if (frm) {
                     _dragPreviewObject = std::make_shared<Object>(frm);
-                    sf::Sprite previewSprite{ _context.resources().textures().get(frmPath) };
+                    sf::Sprite previewSprite{ resources.textures().get(frmPath) };
                     _dragPreviewObject->setSprite(std::move(previewSprite));
                     _dragPreviewObject->setDirection(ObjectDirection(0)); // Single frame for preview
                     // Semi-transparent so the underlying map stays visible

@@ -1,7 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <QAbstractItemModel>
+#include <QCheckBox>
 #include <QCoreApplication>
+#include <QSettings>
 #include <QElapsedTimer>
 #include <QLabel>
 #include <QTreeView>
@@ -56,6 +58,19 @@ TEST_CASE("FileBrowserPanel populates the tree with worker-computed metadata", "
     auto settings = std::make_shared<Settings>();
 
     FileBrowserPanel panel(resources, settings);
+    // The browser starts on "Only the mod's own files", which hides what the .dat archives
+    // provide; the checks below are about a DAT's entries, so show them. The switch is
+    // remembered (under the test app's own name), so the test leaves it as it found it.
+    QCheckBox* looseOnly = nullptr;
+    for (auto* box : panel.findChildren<QCheckBox*>()) {
+        if (box->text().startsWith(QStringLiteral("Only the mod's own files"))) {
+            looseOnly = box;
+        }
+    }
+    REQUIRE(looseOnly != nullptr);
+    const QVariant rememberedLooseOnly = QSettings().value("fileBrowser/looseOnly");
+    looseOnly->setChecked(false);
+
     panel.loadFiles();
     REQUIRE(waitForPopulation(panel, 15000));
 
@@ -83,4 +98,16 @@ TEST_CASE("FileBrowserPanel populates the tree with worker-computed metadata", "
     }
     CHECK(proNameArrived);
     CHECK(modelContains(model, 0, QStringLiteral("test_item_drug_radx.pro")));
+
+    // With the switch on, the DAT's files go and the loose folder's stay.
+    looseOnly->setChecked(true);
+    const QAbstractItemModel* looseModel = tree->model();
+    CHECK_FALSE(modelContains(looseModel, 0, QStringLiteral("hr_alltlk.frm")));
+    CHECK(modelContains(looseModel, 0, QStringLiteral("test_item_drug_radx.pro")));
+
+    if (rememberedLooseOnly.isValid()) {
+        QSettings().setValue("fileBrowser/looseOnly", rememberedLooseOnly);
+    } else {
+        QSettings().remove("fileBrowser/looseOnly");
+    }
 }

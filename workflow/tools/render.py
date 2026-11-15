@@ -62,18 +62,9 @@ TILE_W, TILE_H = 80, 36
 
 # --------------------------------------------------------------------- palette
 
-def load_palette(gi: GameIndex) -> list[tuple[int, int, int]]:
-    """
-    color.pal is 256 RGB triples of 6-bit values, then lookup tables we ignore.
-    Index 0 is transparent.
-    """
-    raw = gi.vfs.read("color.pal")
-    pal = []
-    for i in range(256):
-        r, g, b = raw[i * 3], raw[i * 3 + 1], raw[i * 3 + 2]
-        # 6-bit -> 8-bit; *4 alone leaves the top end at 252
-        pal.append(((r << 2) | (r >> 4), (g << 2) | (g >> 4), (b << 2) | (b >> 4)))
-    return pal
+# The palette (and the engine's colour-cycling slots) is foclib.frm's: one copy for every tool.
+# load_palette and ANIMATED_SLOTS stay importable from here for the tools that take them from render.
+from foclib.frm import ANIMATED_SLOTS, load_palette  # noqa: E402,F401
 
 
 # ------------------------------------------------------------------------- FRM
@@ -181,15 +172,20 @@ class ArtCache:
         if d is None:
             return (None, 0, 0)
         lst = self.art_list(d)
-        i = fid & 0xFFF
+        # the index is 24-bit (FOC's art lists pass 4096 before repack_art.py);
+        # a critter's fid keeps its animation in bits 16-23
+        i = fid & (0xFFF if obj_type == OBJ_TYPE_CRITTER else 0xFFFFFF)
         if not (0 <= i < len(lst)) or not lst[i]:
             return (None, 0, 0)
         name = lst[i].split(",")[0]          # critters.lst rows are "name,fps,..."
         if obj_type == OBJ_TYPE_CRITTER and "." not in name:
             # Critter art is <6-char base><2-char animation code>. "aa" is the
             # idle stand, which is what a map object should show. Some anims
-            # only exist as per-direction .fr0-.fr5, so try both.
-            for suffix in ("aa.frm", "aa.fr0", "ab.frm", ".frm"):
+            # only exist as per-direction .fr0-.fr5, so try both. A corpse's fid
+            # carries a single-frame death (anim 48-63), art "r" + a..p.
+            anim = (fid >> 16) & 0xFF
+            first = (f"r{chr(ord('a') + anim - 48)}.frm",) if 48 <= anim <= 63 else ()
+            for suffix in first + ("aa.frm", "aa.fr0", "ab.frm", ".frm"):
                 cand = f"art/{d}/{name}{suffix}"
                 if self.gi.vfs.exists(cand):
                     return self.by_path(cand, rotation)
@@ -410,6 +406,7 @@ def main() -> int:
     ap.add_argument("--fragment", help="render a corpus fragment by id")
     ap.add_argument("--base", type=Path, default=None)
     ap.add_argument("--source", help="render using another install's art")
+    ap.add_argument("--foc", action="store_true", help="the game as deployed, with FOC's own art and protos (a FOC map)")
     args = ap.parse_args()
 
     if args.source:
@@ -418,6 +415,8 @@ def main() -> int:
         if args.source not in srcs:
             sys.exit(f"unknown source {args.source}")
         gi = GameIndex(Path(srcs[args.source]["path"]), pristine=False)
+    elif args.foc:
+        gi = GameIndex(args.base, pristine=False)
     else:
         gi = GameIndex(args.base)
 

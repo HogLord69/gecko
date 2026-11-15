@@ -34,6 +34,8 @@
 CMakeLists.txt.user
 #CMakeSettings.json
 build*/
+# the stamp library's Buildings folders are not build output (Git on Windows matches build*/ case-blind)
+!resources/stamps/*/Buildings/
 reference/
 .vs/
 

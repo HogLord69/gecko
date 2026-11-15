@@ -62,7 +62,7 @@ void AboutDialog::createContent() {
     _textLayout->setSpacing(ui::constants::SPACING_NORMAL);
 
     _titleLabel = new QLabel();
-    _titleLabel->setText(QString("%1 %2").arg(geck::version::name).arg(geck::version::string));
+    _titleLabel->setText(QString("%1 %2").arg(geck::version::displayName).arg(geck::version::string));
     QFont titleFont = _titleLabel->font();
     titleFont.setBold(true);
     titleFont.setPointSize(titleFont.pointSize() + 4);

@@ -6,6 +6,8 @@
 #include "ui/Settings.h"
 #include "ui/QtDialogs.h"
 #include "ui/assets/ModToolsRunner.h"
+#include "util/GameDataPathResolver.h"
+#include "Application.h"
 
 #include <QApplication>
 #include <QDir>
@@ -114,9 +116,10 @@ void SettingsDialog::setupModToolsTab() {
     auto* intro = new QLabel(
         "The Tools menu (Add Scenery from Picture, Apply New Art, and the copy and name entries on the "
         "map's right-click menu) runs your mod's own tools: tools/gecko_assets.py in the mod folder, "
-        "with Python. Left empty, gecko uses the nearest folder above gecko.exe that has them.\n\n"
+        "with Python. Left empty, gecko uses the map workflow folder beside gecko.exe, or else the nearest "
+        "folder above gecko.exe that has them.\n\n"
         "This is not a data path: the mod folder is your project, not game data. Data paths stay on the "
-        "General tab (for FOC: base\\mods\\foc, the deployed mod).");
+        "General tab (with the map workflow: base\\mods\\foc inside it, the deployed mod).");
     intro->setWordWrap(true);
     layout->addWidget(intro);
 
@@ -390,12 +393,38 @@ void SettingsDialog::loadSettings() {
 
     _hasChanges = false;
     updateUI();
+
+    if (!util::providesGameData(_originalDataPaths)) {
+        setMainStatus(noGameDataMessage(), "warning");
+    }
+}
+
+QString SettingsDialog::noGameDataMessage() {
+    return "No data path holds a game yet. Press Add Path..., then Add Folder..., and choose your Fallout 2 "
+           "folder, the one with master.dat in it (or fill in the Game Location below).";
 }
 
 void SettingsDialog::saveSettings() {
     auto& settings = *_settings;
 
     auto dataPaths = _dataPathsWidget->getDataPaths();
+    // The Game Location sits right under the data paths, and filling it in instead of adding a data
+    // path is the easiest first-run mistake there is: gecko then has no game to read. When no data
+    // path gives it one, the install named there becomes the base game's data paths, as Add Path
+    // would have listed them.
+    QString adoptedGame;
+    if (!util::providesGameData(dataPaths)) {
+        const std::filesystem::path location = _gameLocationWidget->getDataDirectory().empty()
+            ? _gameLocationWidget->getExecutableLocation()
+            : _gameLocationWidget->getDataDirectory();
+        const auto gamePaths = util::gameLocationDataPaths(location);
+        if (!gamePaths.empty()) {
+            dataPaths = util::withBaseGameDataPaths(dataPaths, gamePaths, Application::getResourcesPath());
+            _dataPathsWidget->setDataPaths(dataPaths);
+            adoptedGame = QDir::toNativeSeparators(QString::fromStdU16String(gamePaths.back().u16string()));
+            spdlog::info("No data path gave gecko a game; added the Game Location's install: {}", adoptedGame.toStdString());
+        }
+    }
     bool pathsHaveChanged = dataPaths != _originalDataPaths;
     settings.setDataPaths(dataPaths);
     // After setDataPaths (which drops an unlisted marker), and deliberately NOT part of
@@ -430,7 +459,15 @@ void SettingsDialog::saveSettings() {
     _originalDataPaths = dataPaths;
     _hasChanges = false;
 
-    setMainStatus("Settings saved successfully", "success");
+    if (!adoptedGame.isEmpty()) {
+        setMainStatus("Settings saved. The game data of the Game Location (" + adoptedGame
+                + ") is now a data path too, so gecko can read it.",
+            "success");
+    } else if (!util::providesGameData(dataPaths)) {
+        setMainStatus(noGameDataMessage(), "warning");
+    } else {
+        setMainStatus("Settings saved successfully", "success");
+    }
     spdlog::debug("Settings saved from preferences dialog");
 
     Q_EMIT settingsSaved(pathsHaveChanged);

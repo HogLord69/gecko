@@ -37,6 +37,8 @@
 #include "ui/IconHelper.h"
 #include "format/map/MapObject.h"
 #include "format/pro/Pro.h"
+#include "format/map/ItemDefaults.h"
+#include <QSignalBlocker>
 #include "format/msg/Msg.h"
 #include "format/frm/Frm.h"
 
@@ -1359,7 +1361,8 @@ void SelectionPanel::onAddInventoryClicked() {
     auto item = std::make_unique<MapObject>();
     item->pro_pid = *itemPid;
     item->frm_pid = pro->header.FID;
-    item->amount = static_cast<uint32_t>(dialog.selectedAmount());
+    applyItemDefaults(*item, *pro);
+    setItemAmount(*item, *pro, static_cast<uint32_t>(dialog.selectedAmount())); // ammo: rounds
     item->elevation = holder->elevation;
     item->position = holder->position;
 
@@ -1405,13 +1408,34 @@ void SelectionPanel::onInventoryItemChanged(QTreeWidgetItem* item, int column) {
     bool ok = false;
     const int newAmount = item->text(COLUMN_AMOUNT).toInt(&ok);
     if (!ok || newAmount < 1) {
-        // Revert to the stored amount.
-        item->setText(COLUMN_AMOUNT, QString::number(holder->inventory[row]->amount));
+        // Revert to the stored amount (as shown: rounds for ammo).
+        const QSignalBlocker blocker(_inventoryTree);
+        item->setText(COLUMN_AMOUNT, QString::number(ui::inventory::displayAmount(_resources, *holder->inventory[row])));
         return;
     }
 
+    auto& edited = *holder->inventory[row];
+    if (static_cast<uint32_t>(newAmount) == ui::inventory::displayAmount(_resources, edited)) {
+        return; // unchanged (also the echo of the display refresh below)
+    }
+
     auto before = ObjectCommandController::cloneInventory(holder->inventory);
-    holder->inventory[row]->amount = static_cast<uint32_t>(newAmount);
+    Pro* pro = nullptr;
+    try {
+        pro = _resources.loadPro(edited.pro_pid);
+    } catch (const std::exception&) {
+        pro = nullptr;
+    }
+    if (pro) {
+        setItemAmount(edited, *pro, static_cast<uint32_t>(newAmount)); // ammo: rounds
+    } else {
+        edited.amount = static_cast<uint32_t>(newAmount);
+    }
+    {
+        // show the amount as stored
+        const QSignalBlocker blocker(_inventoryTree);
+        item->setText(COLUMN_AMOUNT, QString::number(ui::inventory::displayAmount(_resources, edited)));
+    }
 
     // Refresh the icon to reflect the new quantity.
     uint32_t pid = item->data(COLUMN_ICON, Qt::UserRole).toUInt();

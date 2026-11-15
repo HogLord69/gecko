@@ -51,6 +51,7 @@ add_executable(general_tests
     general/test_object_queries.cpp
     general/test_object_offset.cpp
     general/test_object_order.cpp
+    general/test_item_amount.cpp
     general/test_black_edge.cpp
     general/test_reading_dat.cpp
     general/test_reading_map.cpp
@@ -113,6 +114,9 @@ add_executable(qt_tests
     qt/test_game_launcher.cpp
     # Preferences: a macOS .app fixes the game root, so the data-directory field follows it.
     qt/test_game_location_widget.cpp
+    qt/test_settings_first_run.cpp
+    qt/test_other_games.cpp
+    qt/test_readme_shots.cpp
     qt/test_palette_model.cpp
     qt/test_object_palette_indexing.cpp
     # PatternSerializer is the editor's Qt (QByteArray/QString) serializer.
@@ -222,6 +226,7 @@ if(TARGET copy_runtime_resources)
 else()
     add_custom_command(
         TARGET qt_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E rm -rf $<TARGET_FILE_DIR:qt_tests>/resources/stamps
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/resources $<TARGET_FILE_DIR:qt_tests>/resources
     )
 endif()

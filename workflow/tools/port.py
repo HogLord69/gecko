@@ -36,6 +36,7 @@ import argparse
 import csv
 import datetime as _dt
 import json
+import os
 import struct
 import sys
 from pathlib import Path
@@ -131,6 +132,12 @@ def load_sources() -> dict[str, dict]:
     return _config.apply_sources(srcs)
 
 
+# Indexes opened this run. Reading a game's archive directories takes a noticeable moment, a port
+# opened the same ones several times per piece, and the installs don't change while a tool runs
+# (sources are read-only; the base below excludes the mod's own deployed layer).
+_opened: dict[tuple[str, str], GameIndex] = {}
+
+
 def open_source(name: str) -> GameIndex:
     srcs = load_sources()
     if name not in srcs:
@@ -140,16 +147,41 @@ def open_source(name: str) -> GameIndex:
     if not path.is_dir():
         sys.exit(f"source '{name}' path does not exist: {path}")
     # pristine=False: we want the source exactly as IT resolves things
-    return GameIndex(path, pristine=False)
+    key = (name, str(path))
+    if key not in _opened:
+        _opened[key] = GameIndex(path, pristine=False)
+    return _opened[key]
+
+
+def base_index() -> GameIndex:
+    """The pristine base (Fallout 2 + RPU, not the mod's own layer), opened once a run."""
+    if ("", "base") not in _opened:
+        _opened[("", "base")] = GameIndex()
+    return _opened[("", "base")]
 
 
 # -------------------------------------------------------------------- ledger
 
+# The rows of the last ledger read, with the file's (path, size, time) then: a port reads the
+# ledger several times and it holds thousands of rows, so it is parsed again only when it changed.
+_ledger_memo: tuple[tuple, list[dict]] | None = None
+
+
+def _ledger_key() -> tuple:
+    st = LEDGER.stat()
+    return str(LEDGER), st.st_size, st.st_mtime_ns
+
+
 def read_ledger() -> list[dict]:
+    """The ledger's rows, as fresh dicts the caller may change."""
+    global _ledger_memo
     if not LEDGER.is_file():
         return []
-    with LEDGER.open(newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+    key = _ledger_key()
+    if _ledger_memo is None or _ledger_memo[0] != key:
+        with LEDGER.open(newline="", encoding="utf-8") as f:
+            _ledger_memo = (key, list(csv.DictReader(f)))
+    return [dict(r) for r in _ledger_memo[1]]
 
 
 def append_ledger(rows: list[dict]) -> None:
@@ -160,6 +192,7 @@ def append_ledger(rows: list[dict]) -> None:
     a previous run was interrupted). It must not grow the ledger each time, or
     the credits file ends up claiming we imported one FRM nine times.
     """
+    global _ledger_memo
     if not rows:
         return
     existing = read_ledger()
@@ -170,12 +203,22 @@ def append_ledger(rows: list[dict]) -> None:
                 r["source_id"].lower()) not in seen]
     if not rows:
         return
+    rows = [{k: "" if r.get(k) is None else str(r[k]) for k in LEDGER_FIELDS} for r in rows]
     LEDGER.parent.mkdir(parents=True, exist_ok=True)
-    with LEDGER.open("w", newline="", encoding="utf-8") as f:
+    fresh = not LEDGER.is_file() or LEDGER.stat().st_size == 0
+    if not fresh:
+        with LEDGER.open("rb") as f:
+            f.seek(-1, os.SEEK_END)
+            ends_line = f.read(1) == b"\n"
+    with LEDGER.open("a", newline="", encoding="utf-8") as f:
+        if not fresh and not ends_line:
+            f.write("\r\n")
         w = csv.DictWriter(f, fieldnames=LEDGER_FIELDS)
-        w.writeheader()
-        for r in existing + rows:
-            w.writerow({k: r.get(k, "") for k in LEDGER_FIELDS})
+        if fresh:
+            w.writeheader()
+        for r in rows:
+            w.writerow(r)
+    _ledger_memo = (_ledger_key(), existing + rows)
 
 
 def ledger_row(source, kind, source_path, source_id, dest_path, dest_id, notes=""):
@@ -301,7 +344,7 @@ def write_merged_msg(art_dir: str) -> None:
     blank out every vanilla/RPU name of that type the instant this file is
     deployed - it must always be a superset, never a substitute."""
     fname = MSG_FILE_FOR_TYPE[art_dir]
-    base = GameIndex()  # pristine=True default: base + RPU only, not our own layer
+    base = base_index()  # pristine: base + RPU only, not our own layer
     try:
         base_msg = parse_msg(base.vfs.read(f"text\\english\\game\\{fname}"))
     except FileNotFoundError:
@@ -429,7 +472,7 @@ def art_names_taken(art_dir: str) -> set[str]:
     """Lowercase names an engine_art_name() pick must avoid in art/<art_dir>:
     the base game's own .lst (a same-name file in the FOC layer would shadow the
     original everywhere), every FOC registry entry, and whatever is on disk."""
-    base = GameIndex()
+    base = base_index()
     try:
         taken = {n.lower() for n in parse_lst(base.vfs.read(f"art\\{art_dir}\\{art_dir}.lst")) if n}
     except FileNotFoundError:
@@ -505,7 +548,7 @@ CRITTER_NAME_LEN = 6  # hard engine limit - gecko's FrmResolver.cpp hardcodes
 def vanilla_critter_bases() -> set[str]:
     """Lowercased base names (before the first comma) of every vanilla/RPU
     critters.lst entry - pristine=True: base only, not this mod's own layer."""
-    base = GameIndex()
+    base = base_index()
     try:
         names = parse_lst(base.vfs.read("art\\critters\\critters.lst"))
     except FileNotFoundError:
@@ -625,7 +668,7 @@ def cmd_proto(args):
                         desired = base.lower()[:CRITTER_NAME_LEN]
                         existing_path = dest_for(f"art\\critters\\{desired}aa.frm")
                         try:
-                            vanilla_bytes = GameIndex().vfs.read(f"art\\critters\\{desired}aa.frm")
+                            vanilla_bytes = base_index().vfs.read(f"art\\critters\\{desired}aa.frm")
                         except FileNotFoundError:
                             vanilla_bytes = None
                         collided = (

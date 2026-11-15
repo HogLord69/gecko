@@ -40,6 +40,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from foclib.safety import backup_map, spent  # noqa: E402
 
 from foclib import GameIndex, parse_lst  # noqa: E402
 from foclib.formats import MapFile  # noqa: E402
@@ -92,6 +93,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("maps", nargs="+")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--elev", type=int, action="append",
+                    help="only this elevation (repeatable): a map whose surface is on 0 and rooms below")
     ap.add_argument("--authored-only", action="store_true", help="leave base/mods/foc alone")
     ap.add_argument("--dir", type=Path, help="work on the maps in this folder (a layout being built)")
     a = ap.parse_args()
@@ -121,6 +124,8 @@ def main() -> int:
         print(name)
         for i, (e, fl) in enumerate(zip(m.elevations, m.floors)):
             box = zones.get(e)
+            if a.elev and e not in a.elev:
+                continue
             if box is None or not any((v & 0xFFF) > 1 for v in fl):
                 continue
             x0, y0, x1, y1 = box[0] - GROW, box[1] - GROW, box[2] + GROW, box[3] + GROW
@@ -137,8 +142,10 @@ def main() -> int:
         check = MapFile.parse(bytes(out), gi.proto)
         assert len(check.objects) == len(m.objects)
         if not a.dry_run:
+            backup_map(path)
             path.write_bytes(bytes(out))
             if dep.exists() and not a.authored_only:
+                backup_map(dep)
                 dep.write_bytes(bytes(out))
     if a.dry_run:
         print("--dry-run: nothing written")

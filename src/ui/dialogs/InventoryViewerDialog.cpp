@@ -338,7 +338,7 @@ void InventoryViewerDialog::onAddItemClicked() {
         return;
     }
 
-    int amount = QInputDialog::getInt(this, "Add Item", "Enter amount:", 1, 1, 99999, 1, &ok);
+    int amount = QInputDialog::getInt(this, "Add Item", "Enter amount (for ammo, the number of rounds):", 1, 1, 99999, 1, &ok);
     if (!ok) {
         return;
     }

@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from foclib.safety import backup_map, spent  # noqa: E402
 
 from foclib import GameIndex  # noqa: E402
 from foclib.formats import MapFile  # noqa: E402
@@ -71,8 +72,10 @@ def main() -> int:
     assert sum(1 for o in check.objects if o.pid == dst) >= n
     print(f"{path.name}: {n} critters swapped" + (" (dry run)" if a.dry_run else ""))
     if not a.dry_run and n:
+        backup_map(path)
         path.write_bytes(bytes(out))
         if dep.exists():
+            backup_map(dep)
             dep.write_bytes(bytes(out))
     return 0
 

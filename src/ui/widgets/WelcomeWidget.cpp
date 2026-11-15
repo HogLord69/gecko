@@ -115,7 +115,7 @@ void WelcomeWidget::renderSvgToLabel(QSvgRenderer& svgRenderer) {
 void WelcomeWidget::createVersionLabel() {
     _versionLabel = new QLabel();
     _versionLabel->setText(QString("Welcome to %1 v%2")
-            .arg(geck::version::name)
+            .arg(geck::version::displayName)
             .arg(geck::version::string));
     _versionLabel->setAlignment(Qt::AlignCenter);
 

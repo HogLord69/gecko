@@ -575,7 +575,8 @@ namespace {
             QString("%1 is your mod's project folder (it has tools\\gecko_assets.py), not game data, so it "
                     "can't be a data path.\n\n"
                     "The Tools menu finds this folder by itself (File > Preferences > Mod Tools).\n\n"
-                    "For your mod's game data, use the deployed mod inside it: for FOC, base\\mods\\foc.")
+                    "For your mod's game data, use the deployed mod inside it: with the map workflow, "
+                    "base\\mods\\foc.")
                 .arg(QDir::toNativeSeparators(picked)));
         return true;
     }
@@ -662,7 +663,9 @@ void DataPathsWidget::onAutoDetect() {
         Q_EMIT dataPathsChanged();
         setStatusMessage(QString("Auto-detection complete. Added %1 new path(s).").arg(addedPaths), "success");
     } else if (detectedPaths.empty()) {
-        setStatusMessage("No Fallout 2 installations detected automatically.", "warning");
+        setStatusMessage("No Fallout 2 install was found automatically. Use Add Path..., then Add Folder..., "
+                         "and choose the folder with master.dat in it.",
+            "warning");
     } else {
         setStatusMessage("Auto-detection complete. All detected paths were already configured.", "info");
     }

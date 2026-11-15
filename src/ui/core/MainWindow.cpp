@@ -1,6 +1,7 @@
 #define QT_NO_EMIT
 #include "MainWindow.h"
 #include "Application.h"
+#include "version.h"
 #include "EditorWidget.h"
 #include "format/map/MapScript.h"
 #include "util/GameDataPathResolver.h"
@@ -88,6 +89,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QInputDialog>
+#include <algorithm>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLineEdit>
@@ -155,7 +157,7 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
     , _fileBrowserPanelAction(nullptr)
     , _isRunning(false) {
 
-    setWindowTitle("Gecko - Fallout 2 Map Editor");
+    setWindowTitle(QStringLiteral("%1 - Fallout 2 Map Editor").arg(geck::version::displayName));
     setMinimumSize(ui::constants::dialog_sizes::MAIN_WINDOW_MIN_WIDTH, ui::constants::dialog_sizes::MAIN_WINDOW_MIN_HEIGHT);
 
     setDockOptions(QMainWindow::AllowTabbedDocks | QMainWindow::AllowNestedDocks | QMainWindow::AnimatedDocks);
@@ -1757,7 +1759,7 @@ void MainWindow::updateAndRender() {
 }
 
 void MainWindow::updateWindowTitle() {
-    const QString base = QStringLiteral("Gecko - Fallout 2 Map Editor");
+    const QString base = QStringLiteral("%1 - Fallout 2 Map Editor").arg(geck::version::displayName);
     const Map* map = _currentEditorWidget ? _currentEditorWidget->getMap() : nullptr;
     if (map && !map->filename().empty()) {
         // Use a literal "*" so the modified marker is visible on every platform (Qt's "[*]" +
@@ -1932,6 +1934,8 @@ void MainWindow::convertQtEventToSFML(QKeyEvent* qtEvent, sf::Event& sfmlEvent, 
 void MainWindow::connectPanelSignals() {
     // Panel signals to lambdas that resolve _currentEditorWidget at call time. Called from
     // setupDockWidgets() and rebuildResourcePanels(); panel recreation drops old connections.
+
+    connectOtherGames();
 
     // SelectionPanel signals → MainWindow / current editor widget
     if (_selectionPanel) {
@@ -2520,9 +2524,29 @@ void MainWindow::updateElevationMenu(Map* map) {
         hasElevation1, hasElevation2, hasElevation3);
 }
 
-void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem) {
+void MainWindow::handleMapLoadRequest(const std::string& requestedPath, bool forceFilesystem) {
     if (!maybeSaveChanges()) {
         return; // user cancelled — keep the current map instead of loading over it
+    }
+
+    // One copy of each map: when the save folder (the highest-priority data path's maps/)
+    // holds a map of this name, that file is the one opened and saved, whichever copy was
+    // picked (an older copy in another data folder, a recent-files entry, a VFS path).
+    std::string mapPath = requestedPath;
+    if (const auto masterDir = writableMapsDir(); !masterDir.empty()) {
+        std::error_code ec;
+        const std::filesystem::path requested(requestedPath);
+        const std::filesystem::path master = masterDir / requested.filename();
+        if (std::filesystem::is_regular_file(master, ec)) {
+            std::error_code eq;
+            const bool same = std::filesystem::equivalent(requested, master, eq);
+            if (!same) {
+                spdlog::info("Opening {} from the save folder ({}) instead of {}", requested.filename().string(),
+                    master.string(), requestedPath);
+                mapPath = master.string();
+                forceFilesystem = true;
+            }
+        }
     }
     spdlog::debug("MainWindow: Handling request to load map: {} (filesystem: {})", mapPath, forceFilesystem);
 
@@ -3091,6 +3115,145 @@ void MainWindow::editNameAndText(ModToolsRunner& runner, quint32 pid) {
     showStatusMessage(QString("Saved the name and examine text for %1. %2").arg(pidText(pid), AFTER_APPLY));
 }
 
+void MainWindow::connectOtherGames() {
+    if (!_objectPalettePanel) {
+        return;
+    }
+    _objectPalettePanel->setOtherGameProviders(
+        [this](QString* note) {
+            QList<ObjectPalettePanel::OtherGame> games;
+            if (!modToolsConfigured()) {
+                *note = "Other games come from your mod's tools: set the mod folder in File > Preferences > Mod Tools";
+                return games;
+            }
+            ModToolsRunner runner(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()), _settings->getPythonExecutable());
+            const ModToolResult result = runner.runAndWait({ "sources" });
+            if (!result.ok) {
+                *note = "The mod tools didn't list the other games: " + result.error;
+                return games;
+            }
+            for (const auto& value : result.json.value("games").toArray()) {
+                const QJsonObject game = value.toObject();
+                games.push_back({ game.value("id").toString(), game.value("label").toString() });
+            }
+            if (games.isEmpty()) {
+                const QString hint = result.json.value("note").toString();
+                *note = hint.isEmpty() ? QString("No other games are set up in the mod's tools/sources.json") : hint;
+            }
+            return games;
+        },
+        [this](const QString& id, QString* error) -> std::optional<ObjectPalettePanel::OtherGameData> {
+            showStatusMessage("Reading the other game. The first time, finding the pieces Fallout 2 doesn't "
+                              "have takes a few seconds, up to a minute for a big game.");
+            ModToolsRunner runner(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()), _settings->getPythonExecutable());
+            const ModToolResult result = runner.runAndWait({ "source", id, "--new" });
+            clearStatusMessage();
+            if (!result.ok) {
+                *error = result.error;
+                return std::nullopt;
+            }
+            ObjectPalettePanel::OtherGameData data;
+            for (const auto& value : result.json.value("paths").toArray()) {
+                data.layers.emplace_back(value.toString().toStdU16String());
+            }
+            const QJsonObject pieces = result.json.value("new").toObject();
+            for (auto it = pieces.constBegin(); it != pieces.constEnd(); ++it) {
+                auto& lines = data.newPieces[it.key()];
+                for (const auto& line : it.value().toArray()) {
+                    lines.insert(line.toInt());
+                }
+            }
+            return data;
+        });
+}
+
+std::optional<uint32_t> MainWindow::bringInFromOtherGame(const QString& source, uint32_t sourcePid) {
+    auto runner = makeModToolsRunner();
+    if (!runner) {
+        return std::nullopt;
+    }
+    showStatusMessage(QString("Bringing %1 into your mod...").arg(pidText(sourcePid)));
+    const ModToolResult result = runWithWaitCursor(*runner, { "port", source, pidText(sourcePid) });
+    if (!result.ok) {
+        clearStatusMessage();
+        QtDialogs::showWarning(this, "Bring In from Another Game", result.error);
+        return std::nullopt;
+    }
+    bool parsed = false;
+    const uint32_t pid = result.json.value("pid").toString().toUInt(&parsed, 0);
+    if (!parsed) {
+        QtDialogs::showWarning(this, "Bring In from Another Game", "The mod tools gave no PID for it.");
+        return std::nullopt;
+    }
+
+    mountOverlay(result.json);
+
+    QString message = result.json.value("new").toBool()
+        ? QString("Brought %1 in from %2 as %3. Tools > Apply New Art puts it in the game.")
+              .arg(pidText(sourcePid), result.json.value("label").toString(), pidText(pid))
+        : QString("%1 from %2 is already in your mod as %3.")
+              .arg(pidText(sourcePid), result.json.value("label").toString(), pidText(pid));
+    const QJsonArray notes = result.json.value("notes").toArray();
+    for (const auto& note : notes) {
+        message += " " + note.toString();
+    }
+    showStatusMessage(message);
+    spdlog::info("{}", message.toStdString());
+    return pid;
+}
+
+void MainWindow::mountOverlay(const QJsonObject& answer) {
+    // The overlay holds the lists a deploy would write and the new files. Mounted last it wins over
+    // the mod's deployed layer; the lists it replaces are read again from it.
+    const QString overlay = answer.value("overlay").toString();
+    if (overlay.isEmpty()) {
+        return;
+    }
+    const std::filesystem::path overlayPath(overlay.toStdU16String());
+    auto& files = _resourcesShared->files();
+    const auto mounts = files.mounts();
+    const bool mounted = std::any_of(mounts.begin(), mounts.end(), [&overlayPath](const auto& mount) {
+        std::error_code ec;
+        return std::filesystem::equivalent(mount.sourcePath, overlayPath, ec);
+    });
+    if (mounted) {
+        files.refresh();
+    } else {
+        files.addDataPath(overlayPath);
+    }
+    for (const auto& value : answer.value("changed").toArray()) {
+        _resourcesShared->repository().forget(value.toString().toStdString());
+    }
+}
+
+std::optional<QString> MainWindow::convertStampFromOtherGame(const QString& source, const QString& stampPath) {
+    auto runner = makeModToolsRunner();
+    if (!runner) {
+        return std::nullopt;
+    }
+    showStatusMessage("Bringing the stamp's pieces into your mod (the first time takes a little while)...");
+    const ModToolResult result = runWithWaitCursor(*runner, { "stamp-convert", source, QDir::toNativeSeparators(stampPath) });
+    if (!result.ok) {
+        clearStatusMessage();
+        QtDialogs::showWarning(this, "Stamp from Another Game", result.error);
+        return std::nullopt;
+    }
+    mountOverlay(result.json);
+    const QString label = result.json.value("label").toString();
+    const QString folder = QFileInfo(QFileInfo(result.json.value("stamp").toString()).path()).fileName();
+    QString message = result.json.value("new").toBool()
+        ? QString("Converted the stamp from %1 into your mod; it is in your stamps (Custom > %2). "
+                  "Tools > Apply New Art puts its new pieces in the game.")
+              .arg(label, folder)
+        : QString("Using the stamp from %1 converted before (Custom > %2).").arg(label, folder);
+    for (const auto& note : result.json.value("notes").toArray()) {
+        message += " " + note.toString();
+    }
+    showStatusMessage(message);
+    spdlog::info("{}", message.toStdString());
+    return result.json.value("stamp").toString();
+}
+
 void MainWindow::onPlayGame() {
     // No save prompt: playGame writes the in-memory map into the game folder, so the file on disk
     // has no bearing on what is played.
@@ -3147,10 +3310,41 @@ void MainWindow::showStampPatternDialog() {
     }
 
     PatternBrowserDialog dialog(*_resourcesShared, this);
+    if (modToolsConfigured()) {
+        // The stamps that came with gecko and were cut from another game: drawn with that game's data,
+        // converted into the mod when picked.
+        dialog.setOtherGames(
+            [this]() {
+                std::map<QString, PatternBrowserDialog::StampGame> games;
+                ModToolsRunner runner(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()), _settings->getPythonExecutable());
+                const QJsonObject folders = runner.runAndWait({ "stamp-games" }).json.value("folders").toObject();
+                for (auto it = folders.constBegin(); it != folders.constEnd(); ++it) {
+                    const QJsonObject game = it.value().toObject();
+                    games[it.key()] = { game.value("id").toString(), game.value("label").toString(),
+                        game.value("available").toBool(), game.value("why").toString() };
+                }
+                return games;
+            },
+            [this](const QString& id, const QString& label) -> resource::GameResources* {
+                return _objectPalettePanel ? _objectPalettePanel->otherGameResources(id, label) : nullptr;
+            });
+    }
     if (dialog.exec() != QDialog::Accepted) {
         return;
     }
     auto selected = dialog.selectedPattern();
+    if (selected.has_value() && !dialog.selectedGameId().isEmpty()) {
+        const auto converted = convertStampFromOtherGame(dialog.selectedGameId(), dialog.selectedPath());
+        if (!converted) {
+            return;
+        }
+        QFile file(*converted);
+        selected = file.open(QIODevice::ReadOnly) ? pattern::PatternSerializer::deserialize(file.readAll()) : std::nullopt;
+        if (!selected) {
+            QtDialogs::showWarning(this, "Stamp from Another Game", "The converted stamp couldn't be read: " + *converted);
+            return;
+        }
+    }
     if (selected.has_value()) {
         _currentEditorWidget->beginStampPattern(std::move(*selected));
     }
