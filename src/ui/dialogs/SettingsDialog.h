@@ -72,6 +72,7 @@ private:
     void saveSettings();
     void updateUI();
     void setMainStatus(const QString& message, const QString& styleClass = "normal");
+    static QString noGameDataMessage();
 
     // UI Components
     QVBoxLayout* _mainLayout;

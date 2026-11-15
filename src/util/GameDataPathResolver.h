@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace geck::util {
@@ -71,5 +72,36 @@ bool pathsEquivalent(const std::filesystem::path& left, const std::filesystem::p
 /// matter how the user reconfigures the data paths — editor-essential assets are not game data,
 /// so they must not disappear with a settings change.
 void ensureFallbackDataPath(std::vector<std::filesystem::path>& paths, const std::filesystem::path& fallbackDir);
+
+/// Whether `dataPaths` give the editor a game's own data: a master.dat entry that exists, or a
+/// folder of loose game data (an extracted master.dat, with color.pal and art/tiles/tiles.lst). A
+/// folder that merely holds a master.dat does not count: DataFileSystem mounts only a folder's loose
+/// files, and its DATs are entries of their own. The editor's bundled resources hold none of this in
+/// a release build.
+bool providesGameData(const std::vector<std::filesystem::path>& dataPaths);
+
+/// The data paths a Game Location stands for, expanded the way Add Path expands a folder
+/// (expandDataPaths: its master.dat and critter.dat, then the install), or empty when the location
+/// names no install with a master.dat. The location may be the install, its `data` folder or the
+/// game's executable. The Game Location fields sit right under the data paths and only drive the
+/// Play button; filling them in instead of adding a data path is an easy first-run mistake, and this
+/// is how the editor reads the game data of the install named there.
+std::vector<std::filesystem::path> gameLocationDataPaths(const std::filesystem::path& location);
+
+/// `dataPaths` with `gamePaths` added as the lowest-priority game data: after the leading entries
+/// inside `resourcesDir` (the editor's bundled fallback stays lowest, as ensureFallbackDataPath keeps
+/// it) and before everything else (a mod's folders stay above the game they change). An entry already
+/// listed is not repeated.
+std::vector<std::filesystem::path> withBaseGameDataPaths(const std::vector<std::filesystem::path>& dataPaths,
+    const std::vector<std::filesystem::path>& gamePaths, const std::filesystem::path& resourcesDir);
+
+/// The Steam library folders a libraryfolders.vdf lists, in order and without repeats: the "path"
+/// values of the current format and the numbered values of the pre-2021 one, with VDF's escaped
+/// backslashes undone.
+std::vector<std::filesystem::path> parseSteamLibraryFolders(const std::string& vdfText);
+
+/// A Steam install's own folder followed by every library its steamapps/libraryfolders.vdf lists:
+/// a game installed to another drive (D:\SteamLibrary) is in one of those, not under the install.
+std::vector<std::filesystem::path> steamLibraryFolders(const std::filesystem::path& steamInstall);
 
 } // namespace geck::util

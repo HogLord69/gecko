@@ -234,16 +234,13 @@ void Application::checkDataConfiguration() {
     if (!settings.exists()) {
         spdlog::info("First run detected, showing settings dialog");
         showStartupSettingsDialog();
-        loadDataPaths();
-        _mainWindow->startThumbnailPrewarm();
-        return;
     }
 
     loadDataPaths();
 
-    // Settings exist, but the configured paths no longer provide the files the editor can't
-    // run without (the game install moved or was deleted since the last run). Prompt once with
-    // the same dialog as on first run, then remount whatever the user configured.
+    // The configured paths do not provide the files the editor can't run without: the first-run
+    // dialog was closed without a game, or the install moved or was deleted since the last run.
+    // Prompt once more with the same dialog, then remount whatever the user configured.
     if (!hasEssentialGameData()) {
         spdlog::warn("Configured data paths are missing essential game files, showing settings dialog");
         if (showStartupSettingsDialog()) {
@@ -292,6 +289,21 @@ void Application::loadDataPaths() {
     auto& settings = *_settings;
     auto dataPaths = settings.getDataPaths();
 
+    // No data path gives gecko a game, but the Game Location names an install: read the game from
+    // there, listed as Add Path would list it. Filling in the Game Location (it sits right under the
+    // data paths in Preferences, and only drives the Play button) instead of adding a data path is
+    // the easiest first-run mistake there is. Kept in memory only, like the --data fallback below;
+    // the Preferences dialog saves it with everything else.
+    if (!_cliDataPathOverride && (dataPaths.empty() || isPlaceholderOnlyDataPaths(dataPaths))) {
+        const auto gamePaths = util::gameLocationDataPaths(settings.getGameLocation());
+        if (!gamePaths.empty()) {
+            spdlog::warn("loadDataPaths - no data path holds a game; reading the Game Location's install: {}",
+                QString::fromStdU16String(gamePaths.back().u16string()).toStdString());
+            dataPaths = util::withBaseGameDataPaths(dataPaths, gamePaths, getResourcesPath());
+            settings.setDataPaths(dataPaths);
+        }
+    }
+
     if (dataPaths.empty()) {
         spdlog::warn("No data paths configured, application may not function properly");
         return;
@@ -337,11 +349,12 @@ void Application::loadDataPaths() {
                           "bundled resources folder instead of a real game install, and no "
                           "--data argument was given to fall back to - not mounting.",
                 dataPaths.size());
-            QtDialogs::showError(_mainWindow.get(), "Data Configuration Problem",
-                "gecko's data paths appear to have reset to its own bundled placeholder data "
-                "instead of your real game install, and no --data argument was given to recover "
-                "with.\n\nNothing has been loaded. Please close gecko and launch it with "
-                "--data \"<path to your Fallout 2 install>\".");
+            QtDialogs::showError(_mainWindow.get(), "No Game Data Yet",
+                "gecko has no game to read: its only data path is its own resources folder.\n\n"
+                "In Preferences (it opens next, or File > Preferences), press Add Path..., then "
+                "Add Folder..., and choose your Fallout 2 folder, the one with master.dat in it. "
+                "Filling in the Game Location below the data paths works too.\n\n"
+                "Starting gecko with --data \"<your Fallout 2 folder>\" also works.");
             return;
         }
     }

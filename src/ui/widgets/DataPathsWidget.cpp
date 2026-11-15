@@ -662,7 +662,9 @@ void DataPathsWidget::onAutoDetect() {
         Q_EMIT dataPathsChanged();
         setStatusMessage(QString("Auto-detection complete. Added %1 new path(s).").arg(addedPaths), "success");
     } else if (detectedPaths.empty()) {
-        setStatusMessage("No Fallout 2 installations detected automatically.", "warning");
+        setStatusMessage("No Fallout 2 install was found automatically. Use Add Path..., then Add Folder..., "
+                         "and choose the folder with master.dat in it.",
+            "warning");
     } else {
         setStatusMessage("Auto-detection complete. All detected paths were already configured.", "info");
     }

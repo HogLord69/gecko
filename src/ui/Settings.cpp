@@ -600,32 +600,70 @@ std::filesystem::path Settings::normalizeDataPath(const std::filesystem::path& p
     return util::resolveGameDataRoot(path).value_or(path);
 }
 
+#ifdef _WIN32
+namespace {
+
+    QString registryString(const QString& key, const QString& name, QSettings::Format format) {
+        const QSettings registry(key, format);
+        return registry.value(name).toString();
+    }
+
+    void appendCandidate(std::vector<Settings::DetectedInstallation>& candidates, const QString& folder, const std::string& description) {
+        if (folder.isEmpty()) {
+            return;
+        }
+        const std::filesystem::path path(QDir::toNativeSeparators(folder).toStdU16String());
+        const bool seen = std::any_of(candidates.begin(), candidates.end(), [&path](const auto& candidate) {
+            return util::pathsEquivalent(candidate.path, path);
+        });
+        if (!seen) {
+            candidates.push_back({ path, description });
+        }
+    }
+
+    // Every folder the registry says Fallout 2 may be in. GOG and Steam write their keys from
+    // 32-bit installers, so on 64-bit Windows they sit under WOW6432Node: both registry views are
+    // read. A Steam game can be in any of Steam's libraries (D:\SteamLibrary, ...), which
+    // steamapps\libraryfolders.vdf lists; only the first is under Steam's own folder.
+    std::vector<Settings::DetectedInstallation> windowsCandidates() {
+        std::vector<Settings::DetectedInstallation> candidates;
+        const QSettings::Format views[] = { QSettings::Registry64Format, QSettings::Registry32Format };
+
+        for (const auto view : views) {
+            appendCandidate(candidates, registryString("HKEY_LOCAL_MACHINE\\SOFTWARE\\GOG.com\\Games\\1207659119", "path", view), "GOG Installation");
+        }
+
+        std::vector<std::filesystem::path> steamRoots;
+        const auto addSteamRoot = [&steamRoots](const QString& folder) {
+            if (!folder.isEmpty()) {
+                appendUnique(steamRoots, std::filesystem::path(QDir::toNativeSeparators(folder).toStdU16String()));
+            }
+        };
+        addSteamRoot(registryString("HKEY_CURRENT_USER\\Software\\Valve\\Steam", "SteamPath", QSettings::NativeFormat));
+        for (const auto view : views) {
+            addSteamRoot(registryString("HKEY_LOCAL_MACHINE\\SOFTWARE\\Valve\\Steam", "InstallPath", view));
+        }
+        for (const auto& root : steamRoots) {
+            for (const auto& library : util::steamLibraryFolders(root)) {
+                const std::filesystem::path game = library / "steamapps" / "common" / "Fallout 2";
+                appendCandidate(candidates, QString::fromStdU16String(game.u16string()), "Steam Installation");
+            }
+        }
+        return candidates;
+    }
+
+} // namespace
+#endif
+
 // Auto-detection methods
 std::vector<std::filesystem::path> Settings::detectFallout2Installations() {
     std::vector<std::filesystem::path> installations;
 
 #ifdef _WIN32
-    // Windows registry detection
-
-    // Check GOG installation
-    QSettings gogRegistry("HKEY_LOCAL_MACHINE\\SOFTWARE\\GOG.com\\Games\\1207659119", QSettings::NativeFormat);
-    QString gogPath = gogRegistry.value("path").toString();
-    if (!gogPath.isEmpty()) {
-        const std::filesystem::path gamePath(gogPath.toStdString());
-        if (const auto normalized = util::resolveGameDataRoot(gamePath)) {
+    for (const auto& candidate : windowsCandidates()) {
+        if (const auto normalized = util::resolveGameDataRoot(candidate.path)) {
             appendUnique(installations, *normalized);
-            spdlog::debug("Found GOG Fallout 2 installation: {}", normalized->string());
-        }
-    }
-
-    // Check Steam installation
-    QSettings steamRegistry("HKEY_LOCAL_MACHINE\\SOFTWARE\\Valve\\Steam", QSettings::NativeFormat);
-    QString steamPath = steamRegistry.value("InstallPath").toString();
-    if (!steamPath.isEmpty()) {
-        const std::filesystem::path steamFo2Path = std::filesystem::path(steamPath.toStdString()) / "steamapps" / "common" / "Fallout 2";
-        if (const auto normalized = util::resolveGameDataRoot(steamFo2Path)) {
-            appendUnique(installations, *normalized);
-            spdlog::debug("Found Steam Fallout 2 installation: {}", normalized->string());
+            spdlog::debug("Found {} of Fallout 2: {}", candidate.description, QString::fromStdU16String(normalized->u16string()).toStdString());
         }
     }
 
@@ -667,27 +705,10 @@ std::vector<Settings::DetectedInstallation> Settings::detectFallout2Installation
     std::vector<DetectedInstallation> installations;
 
 #ifdef _WIN32
-    // Windows registry detection
-
-    // Check GOG installation
-    QSettings gogRegistry("HKEY_LOCAL_MACHINE\\SOFTWARE\\GOG.com\\Games\\1207659119", QSettings::NativeFormat);
-    QString gogPath = gogRegistry.value("path").toString();
-    if (!gogPath.isEmpty()) {
-        std::filesystem::path gogGamePath = std::filesystem::path(gogPath.toStdString());
-        if (util::hasFallout2DataLayout(gogGamePath)) {
-            installations.push_back({ gogGamePath, "GOG Installation" });
-            spdlog::debug("Found GOG Fallout 2 installation: {}", gogGamePath.string());
-        }
-    }
-
-    // Check Steam installation
-    QSettings steamRegistry("HKEY_LOCAL_MACHINE\\SOFTWARE\\Valve\\Steam", QSettings::NativeFormat);
-    QString steamPath = steamRegistry.value("InstallPath").toString();
-    if (!steamPath.isEmpty()) {
-        std::filesystem::path steamGamePath = std::filesystem::path(steamPath.toStdString()) / "steamapps" / "common" / "Fallout 2";
-        if (util::hasFallout2DataLayout(steamGamePath)) {
-            installations.push_back({ steamGamePath, "Steam Installation" });
-            spdlog::debug("Found Steam Fallout 2 installation: {}", steamGamePath.string());
+    for (const auto& candidate : windowsCandidates()) {
+        if (util::hasFallout2DataLayout(candidate.path)) {
+            installations.push_back(candidate);
+            spdlog::debug("Found {} of Fallout 2: {}", candidate.description, QString::fromStdU16String(candidate.path.u16string()).toStdString());
         }
     }
 
