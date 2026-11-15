@@ -52,7 +52,8 @@ public:
     };
     using StampGamesProvider = std::function<std::map<QString, StampGame>()>;
     using GameResourcesProvider = std::function<resource::GameResources*(const QString& id, const QString& label)>;
-    /// Without these, every folder is drawn with the map's own data, as before.
+    /// Without these, only the folders in the map's own numbers (Fallout 2, HogLord Props) are drawn;
+    /// the others list their stamps by name, as games that aren't set up here.
     void setOtherGames(StampGamesProvider games, GameResourcesProvider resources);
 
 private slots:
@@ -62,9 +63,14 @@ private slots:
     void onImport();
 
 private:
-    /// `resources` draws the thumbnails; null draws none (a game that isn't set up here).
+    /// The folder's subfolders as tiles, then its stamps. `resources` draws the stamps' thumbnails;
+    /// null draws none (a game that isn't set up here).
     void populateGrid(const QString& folder, resource::GameResources* resources);
-    /// The game a bundled folder is in the numbers of, or nullopt for the map's own.
+    /// Select `path` in whichever tree holds it (the grid follows), its parent opened.
+    void openFolder(const QString& path);
+    /// The game a bundled folder is in the numbers of, or nullopt for the map's own. When the mod
+    /// tools can't say (none, or they don't run), every top folder but the map's own is another
+    /// game that isn't set up here.
     std::optional<StampGame> bundledGame(const QString& folder);
 
     resource::GameResources& _resources;
