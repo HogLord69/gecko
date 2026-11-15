@@ -5,6 +5,7 @@
 #include <spdlog/spdlog.h>
 
 #include "editor/Object.h"
+#include "editor/helper/GameDrawOrder.h"
 #include "rendering/ObjectVisibility.h"
 #include "ui/core/EditorSession.h"
 
@@ -16,16 +17,18 @@ std::vector<std::shared_ptr<Object>> ObjectPicker::objectsAtPosition(sf::Vector2
     // Only objects that are actually drawn are selectable: a click must never land on a
     // hidden object (e.g. a scroll blocker on a hidden layer) and produce an invisible
     // selection. isObjectVisible is the same rule RenderingEngine::renderObjects applies.
-    std::ranges::copy_if(_session.objects(), std::back_inserter(objectsAtPos),
-        [this, worldPos](const auto& object) {
-            return isObjectVisible(object->getMapObject(), _session.visibility())
-                && isPointInSpritePixel(worldPos, object->getSprite());
-        });
-
-    // Objects are drawn in _session.objects() order (see RenderingEngine::renderObjects), so the object
-    // drawn last is the one visually on top. copy_if preserved that draw order, so reverse it to
-    // put the topmost-drawn object first: the pick then matches exactly what the user sees, and
+    // Objects are drawn in the game's order (editor/helper/GameDrawOrder.h, as
+    // RenderingEngine::renderObjects draws them), so walk them in that order and reverse it to put
+    // the topmost-drawn object first: the pick then matches exactly what the user sees, and
     // repeated clicks cycle stacked objects from top to bottom.
+    const auto& objects = _session.objects();
+    for (const std::size_t i : game_draw_order::drawOrder(game_draw_order::drawKeys(objects))) {
+        const auto& object = objects[i];
+        if (isObjectVisible(object->getMapObject(), _session.visibility())
+            && isPointInSpritePixel(worldPos, object->getSprite())) {
+            objectsAtPos.push_back(object);
+        }
+    }
     std::ranges::reverse(objectsAtPos);
 
     if (objectsAtPos.size() > 1) {

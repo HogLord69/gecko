@@ -8,14 +8,13 @@ namespace geck {
 
 struct MapObject;
 
-/// Draw-order edits for the right-click "Bring to Front / Send to Back" commands.
+/// The Step names the right-click "Bring to Front / Send to Back" commands use, and a file-order
+/// reorder.
 ///
-/// gecko draws an elevation's objects in their map-file order, so the order of
-/// Map::map_objects[elevation] is the stacking order on screen (last = on top). The engine
-/// draws hex by hex instead (fallout2-ce object.cc, _obj_render_pre_roof: flat objects in
-/// ascending hex order, then everything else in ascending hex order), and the file order only
-/// decides which of several objects on the SAME hex is drawn last. So these edits always change
-/// what gecko shows, but in game only between objects sharing a hex.
+/// gecko draws in the game's order (editor/helper/GameDrawOrder.h): hex by hex, the file order
+/// only deciding between objects on the SAME hex. So the editor's commands
+/// (EditorWidget::reorderSelectedObjects) move an object's hex, not its place in the file;
+/// `reordered` below changes only the file order, which shows only between objects on one hex.
 namespace object_order {
 
     enum class Step {
