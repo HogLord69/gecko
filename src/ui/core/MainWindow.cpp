@@ -3305,7 +3305,10 @@ void MainWindow::showSavePatternDialog() {
 
 void MainWindow::showStampPatternDialog() {
     if (!_currentEditorWidget || !hasActiveMap()) {
-        showStatusMessage("Open a map before stamping a pattern.");
+        // A box, not the status bar: from the welcome screen nothing else would happen at all.
+        QtDialogs::showInfo(this, "Stamp Pattern",
+            "Open a map first (File > Open Map, or File > New Map for an empty one): a stamp is placed "
+            "on the map you are editing. Then Edit > Stamp Pattern again.");
         return;
     }
 

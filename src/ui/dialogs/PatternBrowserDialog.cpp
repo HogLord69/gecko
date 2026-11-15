@@ -2,9 +2,11 @@
 
 #include <QApplication>
 #include <QDir>
+#include <QDirIterator>
 #include <QDialogButtonBox>
 #include <QFile>
 #include <QFileDialog>
+#include <QFileIconProvider>
 #include <QFileInfo>
 #include <QFileSystemModel>
 #include <QHBoxLayout>
@@ -31,6 +33,18 @@ namespace geck {
 namespace {
     constexpr int THUMBNAIL_SIZE = 96;
     constexpr int PATH_ROLE = Qt::UserRole + 1;
+    constexpr int FOLDER_ROLE = Qt::UserRole + 2; ///< a subfolder's tile: the folder it opens
+
+    /// The stamp library's own layout (resources/stamps/README.md): these top folders are in Fallout
+    /// 2's numbers, the map's own; every other one was cut from another game.
+    const QStringList& ownNumbersFolders() {
+        static const QStringList folders{ QStringLiteral("Fallout 2"), QStringLiteral("HogLord Props") };
+        return folders;
+    }
+
+    bool holdsStamps(const QString& folder) {
+        return QDirIterator(folder, { QStringLiteral("*.json") }, QDir::Files, QDirIterator::Subdirectories).hasNext();
+    }
 
     /// The stamp library's order: by name, with numbers read as numbers ("#3" before "#13").
     bool libraryLess(const QString& left, const QString& right) {
@@ -166,6 +180,17 @@ PatternBrowserDialog::PatternBrowserDialog(resource::GameResources& resources, Q
     } else {
         populateGrid(root, &_resources);
     }
+
+    // Someone with no stamps of their own yet opens on Fallout 2's that came with gecko, its folders
+    // showing, rather than on an empty Custom folder.
+    if (_bundledTree && !holdsStamps(root)) {
+        const QModelIndex start = _bundledOrder->mapFromSource(
+            _bundledModel->index(QDir(pattern::PatternLibrary::bundledDir()).filePath(ownNumbersFolders().front())));
+        if (start.isValid()) {
+            _bundledTree->expand(start);
+            _bundledTree->setCurrentIndex(start); // currentChanged fills the grid with its folders
+        }
+    }
 }
 
 void PatternBrowserDialog::setOtherGames(StampGamesProvider games, GameResourcesProvider resources) {
@@ -176,20 +201,30 @@ void PatternBrowserDialog::setOtherGames(StampGamesProvider games, GameResources
 
 std::optional<PatternBrowserDialog::StampGame> PatternBrowserDialog::bundledGame(const QString& folder) {
     const QString bundled = pattern::PatternLibrary::bundledDir();
-    if (!_stampGames || bundled.isEmpty()) {
+    if (bundled.isEmpty()) {
         return std::nullopt;
     }
     const QString below = QDir(bundled).relativeFilePath(QFileInfo(folder).canonicalFilePath());
     const QString top = below.section('/', 0, 0);
-    if (!_games) {
+    if (top.isEmpty() || top == "." || top == ".." || ownNumbersFolders().contains(top, Qt::CaseInsensitive)) {
+        return std::nullopt;
+    }
+    if (_stampGames && !_games) {
         QApplication::setOverrideCursor(Qt::WaitCursor);
         _games = _stampGames();
         QApplication::restoreOverrideCursor();
     }
-    if (const auto found = _games->find(top); found != _games->end()) {
-        return found->second;
+    if (_games && !_games->empty()) {
+        if (const auto found = _games->find(top); found != _games->end()) {
+            return found->second;
+        }
+        return std::nullopt;
     }
-    return std::nullopt;
+    // No answer from the mod tools (there are none, or Python isn't there to run them). Drawn with
+    // this game's data these stamps would show, and stamp, the wrong pieces.
+    return StampGame{ QString(), top, false,
+        "the map workflow, which converts them, isn't set up here (it needs Python 3.10 or newer: run "
+        "python setup.py in the workflow folder beside gecko.exe)" };
 }
 
 PatternBrowserDialog::~PatternBrowserDialog() = default;
@@ -238,6 +273,18 @@ void PatternBrowserDialog::populateGrid(const QString& folder, resource::GameRes
     _grid->clear();
 
     const QDir dir(folder);
+    // Subfolders first, as tiles: the stamps of a game's folder are a level or two further down
+    // (Fallout 2 > Buildings > Adobe), and a folder with none of its own must not look empty.
+    QStringList subfolders = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    std::sort(subfolders.begin(), subfolders.end(), libraryLess);
+    const QIcon folderIcon = QFileIconProvider().icon(QFileIconProvider::Folder);
+    for (const QString& name : subfolders) {
+        auto* item = new QListWidgetItem(folderIcon, name, _grid);
+        item->setData(FOLDER_ROLE, dir.filePath(name));
+        item->setTextAlignment(Qt::AlignHCenter | Qt::AlignTop);
+        item->setToolTip("Double-click to open this folder");
+    }
+
     QStringList files = dir.entryList({ QStringLiteral("*.json") }, QDir::Files);
     std::sort(files.begin(), files.end(), libraryLess);
     for (const QString& file : files) {
@@ -266,21 +313,48 @@ void PatternBrowserDialog::onPatternActivated(QListWidgetItem* item) {
     if (item == nullptr) {
         return;
     }
+    if (const QString folder = item->data(FOLDER_ROLE).toString(); !folder.isEmpty()) {
+        openFolder(folder);
+        return;
+    }
     const QString path = item->data(PATH_ROLE).toString();
     auto pattern = loadPattern(path);
     if (!pattern.has_value()) {
         return;
     }
+    QString game = _currentGame ? _currentGame->id : QString();
     if (_currentGame && !_currentGame->available) {
-        QtDialogs::showWarning(this, "Pattern Library",
-            QString("This stamp is in %1's numbers, and %1 isn't set up here (%2), so it would stamp the wrong pieces.")
-                .arg(_currentGame->label, _currentGame->why));
-        return;
+        // Right as it is only for someone editing that game itself; in any other it can't be converted.
+        if (!QtDialogs::showQuestion(this, "Pattern Library",
+                QString("This stamp is in %1's numbers, and %1 isn't set up here: %2.\n\n"
+                        "Stamp it as it is? That is only right while the game you are editing is %1 itself; "
+                        "in any other game it places the wrong pieces.")
+                    .arg(_currentGame->label, _currentGame->why))) {
+            return;
+        }
+        game.clear(); // as it is: nothing to convert
     }
     _selected = std::move(pattern);
     _selectedPath = path;
-    _selectedGame = _currentGame ? _currentGame->id : QString();
+    _selectedGame = game;
     accept();
+}
+
+void PatternBrowserDialog::openFolder(const QString& path) {
+    const QString bundled = pattern::PatternLibrary::bundledDir();
+    const bool came = _bundledTree && !bundled.isEmpty()
+        && QFileInfo(path).canonicalFilePath().startsWith(bundled + '/', Qt::CaseInsensitive);
+    QTreeView* tree = came ? _bundledTree : _folderTree;
+    QFileSystemModel* files = came ? _bundledModel : _folderModel;
+    QSortFilterProxyModel* order = came ? _bundledOrder : _folderOrder;
+    const QModelIndex index = order->mapFromSource(files->index(path));
+    if (!index.isValid()) {
+        populateGrid(path, came ? nullptr : &_resources);
+        return;
+    }
+    tree->expand(index.parent());
+    tree->setCurrentIndex(index); // currentChanged fills the grid
+    tree->scrollTo(index);
 }
 
 void PatternBrowserDialog::onImport() {

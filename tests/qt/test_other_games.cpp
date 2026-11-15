@@ -9,6 +9,7 @@
 
 #include <QCheckBox>
 #include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QFileSystemModel>
 #include <QSortFilterProxyModel>
@@ -65,6 +66,40 @@ void revealFolder(QTreeView* tree, const QString& root, const QString& below) {
         tree->expand(folderIndex(tree, QFileInfo(at).path()));
     }
     tree->setCurrentIndex(folderIndex(tree, at));
+}
+
+QStringList gridNames(const QListWidget* grid) {
+    QStringList names;
+    for (int i = 0; i < grid->count(); ++i) {
+        names << grid->item(i)->text();
+    }
+    return names;
+}
+
+/// Double-click (activate) the grid's tile named `name`; false when there is none.
+bool activateTile(QListWidget* grid, const QString& name) {
+    for (int i = 0; i < grid->count(); ++i) {
+        if (grid->item(i)->text() == name) {
+            Q_EMIT grid->itemActivated(grid->item(i));
+            return true;
+        }
+    }
+    return false;
+}
+
+/// The note above the Pattern Library's trees about another game's stamps, or empty when hidden.
+QString gameNote(const QDialog& dialog) {
+    for (auto* label : dialog.findChildren<QLabel*>()) {
+        if (!label->isHidden() && label->text().startsWith("Stamps from")) {
+            return label->text();
+        }
+    }
+    return {};
+}
+
+QString currentFolderName(QTreeView* tree) {
+    auto* order = qobject_cast<QSortFilterProxyModel*>(tree->model());
+    return QFileInfo(folderModel(tree)->filePath(order->mapToSource(tree->currentIndex()))).fileName();
 }
 
 } // namespace
@@ -278,4 +313,84 @@ TEST_CASE("The Pattern Library draws another game's stamps with its data and say
     REQUIRE(grid->count() > 0);
     Q_EMIT grid->itemActivated(grid->item(0));
     CHECK(dialog.selectedGameId().isEmpty());
+}
+
+TEST_CASE("A Pattern Library folder shows its folders as tiles that open them", "[qt][othergames]") {
+    const QString bundled = geck::pattern::PatternLibrary::bundledDir();
+    if (bundled.isEmpty() || !QDir(bundled).exists("Fallout 2/Buildings/Adobe")) {
+        SKIP("no stamps beside this test program");
+    }
+    geck::resource::GameResources resources;
+    geck::PatternBrowserDialog dialog(resources);
+    dialog.show();
+    auto* tree = dialog.findChild<QTreeView*>("bundledStampsTree");
+    REQUIRE(tree != nullptr);
+    auto* grid = dialog.findChild<QListWidget*>();
+    REQUIRE(grid != nullptr);
+
+    // A game's folder holds folders, not stamps: they are its tiles, not an empty grid.
+    revealFolder(tree, bundled, "Fallout 2");
+    CHECK(gridNames(grid).contains("Buildings"));
+    CHECK(gridNames(grid).contains("Ruins"));
+    REQUIRE(activateTile(grid, "Buildings"));
+    CHECK(currentFolderName(tree) == "Buildings"); // the tree follows
+    CHECK_FALSE(dialog.selectedPattern().has_value()); // a folder opens; nothing is picked
+    REQUIRE(activateTile(grid, "Adobe"));
+    CHECK(currentFolderName(tree) == "Adobe");
+    REQUIRE(grid->count() > 0);
+    Q_EMIT grid->itemActivated(grid->item(0)); // a leaf folder: its first tile is a stamp
+    CHECK(dialog.selectedPattern().has_value());
+    CHECK(dialog.selectedGameId().isEmpty());
+}
+
+TEST_CASE("Without the mod tools another game's stamps are not passed off as the map's own", "[qt][othergames]") {
+    const QString bundled = geck::pattern::PatternLibrary::bundledDir();
+    if (bundled.isEmpty() || !QDir(bundled).exists("Sonora/Buildings/Adobe")) {
+        SKIP("no stamps beside this test program");
+    }
+    geck::resource::GameResources resources;
+    geck::PatternBrowserDialog dialog(resources);
+    SECTION("no mod tools at all") {
+    }
+    SECTION("mod tools that give no answer (Python isn't there to run them)") {
+        dialog.setOtherGames([]() { return std::map<QString, geck::PatternBrowserDialog::StampGame>{}; },
+            [](const QString&, const QString&) -> geck::resource::GameResources* { return nullptr; });
+    }
+    dialog.show();
+    auto* tree = dialog.findChild<QTreeView*>("bundledStampsTree");
+    REQUIRE(tree != nullptr);
+    auto* grid = dialog.findChild<QListWidget*>();
+    REQUIRE(grid != nullptr);
+
+    revealFolder(tree, bundled, "Sonora/Buildings/Adobe");
+    CHECK(gameNote(dialog).contains("Sonora"));
+    CHECK(gameNote(dialog).contains("map workflow"));
+    REQUIRE(grid->count() > 0);
+    CHECK(grid->item(0)->icon().isNull()); // listed by name: no picture made of the wrong pieces
+
+    revealFolder(tree, bundled, "Fallout 2/Buildings/Adobe");
+    CHECK(gameNote(dialog).isEmpty()); // the map's own numbers
+
+    revealFolder(tree, bundled, "HogLord Props");
+    CHECK(gameNote(dialog).isEmpty());
+}
+
+TEST_CASE("Someone with no stamps of their own opens the Pattern Library on Fallout 2's", "[qt][othergames]") {
+    const QString bundled = geck::pattern::PatternLibrary::bundledDir();
+    if (bundled.isEmpty() || !QDir(bundled).exists("Fallout 2/Buildings")) {
+        SKIP("no stamps beside this test program");
+    }
+    const QString own = geck::pattern::PatternLibrary::rootDir(); // the test location's, in test mode
+    if (QDirIterator(own, { "*.json" }, QDir::Files, QDirIterator::Subdirectories).hasNext()) {
+        SKIP("the test location already holds stamps");
+    }
+    geck::resource::GameResources resources;
+    geck::PatternBrowserDialog dialog(resources);
+    auto* tree = dialog.findChild<QTreeView*>("bundledStampsTree");
+    REQUIRE(tree != nullptr);
+    auto* grid = dialog.findChild<QListWidget*>();
+    REQUIRE(grid != nullptr);
+    CHECK(currentFolderName(tree) == "Fallout 2");
+    CHECK(tree->isExpanded(tree->currentIndex()));
+    CHECK(gridNames(grid).contains("Buildings"));
 }
