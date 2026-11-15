@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 real_site.py - fetch a real place's layout from OpenStreetMap (Overpass API)
-and draw it to scale, north up, as the reference a FOC site plan is adapted
+and draw it to scale, north up, as the reference a site plan is adapted
 from. Results are cached in build/realsite/<name>.json.
 
     python tools/real_site.py webb 32.195 -101.545 32.235 -101.500
@@ -43,7 +43,7 @@ def fetch(name: str, bbox, streets: bool, extra: list[str]) -> dict:
     import re
     import time
     for attempt in range(4):
-        subprocess.run(["curl", "-s", "-m", "120", "-A", "FOC-mod-site-planner/1.0", "-H", "Accept: application/json",
+        subprocess.run(["curl", "-s", "-m", "120", "-A", "fallout-map-site-planner/1.0", "-H", "Accept: application/json",
                         "-o", str(p), "--data-urlencode", f"data={q}", URL], check=True)
         text = p.read_text(encoding="utf-8", errors="replace")
         if text.lstrip().startswith("{"):

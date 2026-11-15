@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-check_links.py - check every way into and out of FOC maps.
+check_links.py - check every way into and out of mod maps.
 
     python tools/check_links.py RWFAC1.MAP RWFAC2.MAP RWFAC3.MAP
     python tools/check_links.py --all

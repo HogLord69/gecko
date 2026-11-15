@@ -1,5 +1,5 @@
-# FOC's Pip-Boy quest log. tools/questlog.py turns this into data\quests.txt
-# at deploy (FOC ships only its own quests; the base's are all vanilla).
+# Your mod's Pip-Boy quest log. tools/questlog.py turns this into data\quests.txt
+# at deploy (the mod ships only its own quests; the base's are all vanilla).
 #
 #   <map>, <line>, <GVAR>, <shown at>, <done at>
 #

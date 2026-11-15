@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 scale_scenery.py - add a bigger (or smaller) copy of a scenery object as a new
-FOC piece: its own art and its own proto, the original left as it is.
+mod piece: its own art and its own proto, the original left as it is.
 
     python tools/scale_scenery.py 0x02001362 ntheatr2.frm --scale 2 --preview build/s.png
     python tools/scale_scenery.py 0x02001362 ntheatr2.frm --scale 2 --write

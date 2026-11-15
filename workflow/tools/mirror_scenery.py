@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 mirror_scenery.py - add a left-right mirrored copy of a scenery object as a
-new FOC piece: its own art and its own proto, the original left as it is.
+new mod piece: its own art and its own proto, the original left as it is.
 
     python tools/mirror_scenery.py 0x02000664 encl40m.frm --preview build/m.png
     python tools/mirror_scenery.py 0x02000664 encl40m.frm --write

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-map_edges.py - give FOC's maps Hi-Res Patch edge files (maps/<name>.edg), so the
+map_edges.py - give the mod's maps Hi-Res Patch edge files (maps/<name>.edg), so the
 camera stops at the edge of the painted ground and the void beyond is never seen.
 
     python tools/map_edges.py --preview build/edges       # renders with the boxes drawn on, nothing written
@@ -13,7 +13,7 @@ camera in, but we run 1920x1080 at 2x through Mash's Hi-Res Patch, whose view is
 far bigger, and this HRP build ignores scroll blockers anyway (f2_res.ini note,
 2026-09-08). The HRP reads maps\\<name>.edg instead (f2_res.dll: "maps\\%s" ".edg"):
 with EDGE_CLIPPING_ON=1 it stops scrolling at that box and draws everything outside
-it black, a clean straight cut-off. RPU ships one for every vanilla map; FOC's maps
+it black, a clean straight cut-off. RPU ships one for every vanilla map; the mod's maps
 had none, so the camera wandered off into the void.
 
 The format (v1, big-endian int32s, as RPU's files and gecko's MapEdgeReader):

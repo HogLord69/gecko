@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 room_props.py - how the originals and the total conversions furnish the rooms of
-a kind of place, measured room by room, so a FOC map can be furnished the way
+a kind of place, measured room by room, so a map can be furnished the way
 theirs are (owner, 2026-10-20: "those objects you placed do not fit with those
 locations, how are you determining where to place objects?").
 

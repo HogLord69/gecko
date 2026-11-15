@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-render_stamp.py - render gecko stamps (pattern JSON) with FOC's data, the way
+render_stamp.py - render gecko stamps (pattern JSON) with the mod's data, the way
 gecko would stamp them, to check them without opening the editor.
 
     python tools/render_stamp.py STAMP.json [...] -o out.png          # one image per stamp

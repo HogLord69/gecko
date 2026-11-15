@@ -125,7 +125,7 @@ def place_building(b):
 # ------------------------------------------------------------------ underlay
 
 class _FocSource:
-    """FOC's own deployed maps (base/mods/foc/maps) as an underlay source."""
+    """The mod's own deployed maps (base/mods/foc/maps) as an underlay source."""
 
     def __init__(self):
         from foclib import GameIndex

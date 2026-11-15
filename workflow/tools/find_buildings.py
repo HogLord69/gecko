@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 find_buildings.py - find buildings, in any source's maps, walled in given
-wall families (e.g. to match a FOC town's look).
+wall families (e.g. to match a town's look).
 
     python tools/find_buildings.py --families nec,sher,snec,jds,jas,jcs,jbs --min-roof 120
 

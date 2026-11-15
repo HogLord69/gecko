@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 port_bulk.py - port every distinct proto of the given types from one or more
-sources into FOC's own data in one pass, skipping anything whose ART is
-byte-identical to something FOC's data already has or that an earlier source
+sources into the mod's own data in one pass, skipping anything whose ART is
+byte-identical to something the mod's data already has or that an earlier source
 in this same run already contributed.
 
     python tools/port_bulk.py --sources yesterday sonora nevada resurrection \
@@ -113,12 +113,12 @@ def main() -> int:
     ap.add_argument("--log", help="write cmd_proto's per-item output here instead of stdout")
     args = ap.parse_args()
 
-    # Baseline: what FOC's own data (base + already-deployed mod) already has,
+    # Baseline: what the mod's own data (base + already-deployed mod) already has,
     # per type. pristine=False: we want the FULL "what's already here" view.
     foc = GameIndex(pristine=False)
     seen: dict[str, set[str]] = {t: hash_all_art(foc.vfs, t) for t in args.types}
     for t in args.types:
-        print(f"baseline: {len(seen[t])} distinct {t} art hash(es) already in FOC's data")
+        print(f"baseline: {len(seen[t])} distinct {t} art hash(es) already in the mod's data")
 
     wanted: dict[str, list[int]] = {s: [] for s in args.sources}
     totals = {"new": 0, "dup": 0, "unresolved": 0}

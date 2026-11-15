@@ -261,7 +261,7 @@ def find_areas(gi, m: MapFile, ei: int, raw: bytes, wl, sc, it):
 
 
 def placeholder_art(foc: GameIndex, sc: list[str]) -> set[int]:
-    """FOC scenery indices that draw an "UNUSED ART" box: mstr69 and every
+    """Mod scenery indices that draw an "UNUSED ART" box: mstr69 and every
     FRM byte-identical to it, and every small image that is mostly the
     bright green of the box Fallout 2's scenery copies of furniture
     (bookcases, desks, shelves, stairs...) draw; their real art is under items."""
@@ -301,7 +301,7 @@ def write(sources, out: Path, native: bool = False, portable: bool = False) -> N
     for src in sources:
         gi = GameIndex() if src == "fo2" else port.open_source(src)
         ids = Ids(src, gi, foc, native)
-        # markers are judged on FOC's art names: TCs name the marker art their own way
+        # markers are judged on the mod's art names: TCs name the marker art their own way
         ids_foc = Ids(src, gi, foc, False) if native else ids
         wl = parse_lst(gi.vfs.read("art\\walls\\walls.lst"))
         sc = parse_lst(gi.vfs.read("art\\scenery\\scenery.lst"))
@@ -380,7 +380,7 @@ def main() -> int:
     ap.add_argument("--sources", default="fo1,fo2")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--native", action="store_true", help="keep each game's own ids")
-    ap.add_argument("--portable", action="store_true", help="skip stamps that use ids only FOC has")
+    ap.add_argument("--portable", action="store_true", help="skip stamps that use ids only the mod has")
     args = ap.parse_args()
     write(args.sources.split(","), args.out, args.native, args.portable)
     return 0

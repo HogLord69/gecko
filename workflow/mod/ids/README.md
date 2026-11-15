@@ -24,7 +24,7 @@ The engine reads every `art/<dir>/<dir>.lst` line with `strncpy(dst, line, 12)`
 at `0x48d9c4` when it shares a hex with another object. Gecko does not truncate,
 so a bad name looks fine in the editor. `port.py` therefore names imported art
 `<source tag><stem>.frm` (8.3) via `ids.engine_art_name()`, and `validate.py`
-fails on any FOC entry over 12 characters. `art_renames.csv` records the
+fails on any mod entry over 12 characters. `art_renames.csv` records the
 2026-09-17 mass rename that brought the existing 8,839 entries into line; a FID
 is an index, so no proto or map changed.
 

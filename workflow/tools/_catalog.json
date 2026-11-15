@@ -9,7 +9,7 @@
       },
       {
         "tool": "render_stamp.py",
-        "what": "Render gecko stamps (pattern JSON) with FOC's data, the way gecko would stamp them, to check them without opening the editor."
+        "what": "Render gecko stamps (pattern JSON) with the mod's data, the way gecko would stamp them, to check them without opening the editor."
       },
       {
         "tool": "render_building.py",
@@ -25,15 +25,15 @@
       },
       {
         "tool": "frm_sheet.py",
-        "what": "Contact sheet of FOC art by name, first frame of direction 0."
+        "what": "Contact sheet of mod art by name, first frame of direction 0."
       },
       {
         "tool": "map_survey.py",
-        "what": "Measure how the maps of Fallout 1, Fallout 2 and the total conversions are laid out, so a generated FOC map can follow the same habits."
+        "what": "Measure how the maps of Fallout 1, Fallout 2 and the total conversions are laid out, so a generated mod map can follow the same habits."
       },
       {
         "tool": "map_survey_one.py",
-        "what": "Measure one FOC map the way map_survey.py measures the originals, next to the all-source town medians."
+        "what": "Measure one mod map the way map_survey.py measures the originals, next to the all-source town medians."
       },
       {
         "tool": "map_survey_sheet.py",
@@ -69,7 +69,7 @@
       },
       {
         "tool": "room_props.py",
-        "what": "How the originals and the total conversions furnish the rooms of a kind of place, measured room by room, so a FOC map can be furnished the way theirs are (owner, 2026-10-20: \"those objects you placed do not fit with those locat..."
+        "what": "How the originals and the total conversions furnish the rooms of a kind of place, measured room by room, so a map can be furnished the way theirs are (owner, 2026-10-20: \"those objects you placed do not fit with those locat..."
       },
       {
         "tool": "furniture_walls.py",
@@ -97,7 +97,7 @@
       },
       {
         "tool": "check_wall_sequences.py",
-        "what": "Check a FOC map's walls of one set against the originals' sequences (tools/wall_sequences.py's build/wall_sequences/<set>.json): every pair of neighbouring pieces along an x-run (x, x+1) and a y-run (y, y+1) should be a pair th..."
+        "what": "Check a map's walls of one set against the originals' sequences (tools/wall_sequences.py's build/wall_sequences/<set>.json): every pair of neighbouring pieces along an x-run (x, x+1) and a y-run (y, y+1) should be a pair th..."
       }
     ]
   },
@@ -107,7 +107,7 @@
     "tools": [
       {
         "tool": "find_art.py",
-        "what": "List FOC art list entries (index, name) matching regexes."
+        "what": "List mod art list entries (index, name) matching regexes."
       },
       {
         "tool": "findart.py",
@@ -119,7 +119,7 @@
       },
       {
         "tool": "find_proto.py",
-        "what": "Search FOC's protos by display name or art name."
+        "what": "Search the mod's protos by display name or art name."
       },
       {
         "tool": "find_rooms.py",
@@ -131,11 +131,11 @@
       },
       {
         "tool": "find_tile.py",
-        "what": "List FOC floor/roof tile ids by name prefix (ids below 4096, the only ones gecko and the engine can address)."
+        "what": "List mod floor/roof tile ids by name prefix (ids below 4096, the only ones gecko and the engine can address)."
       },
       {
         "tool": "open_tiles.py",
-        "what": "List open floor hexes in a hex rectangle of a FOC map: no blocking object, no exit grid within 2 hexes, reachable on foot from the map's start, at least --spacing hexes apart."
+        "what": "List open floor hexes in a hex rectangle of a map: no blocking object, no exit grid within 2 hexes, reachable on foot from the map's start, at least --spacing hexes apart."
       },
       {
         "tool": "stamp_extent.py",
@@ -161,7 +161,7 @@
       },
       {
         "tool": "real_site.py",
-        "what": "Fetch a real place's layout from OpenStreetMap (Overpass API) and draw it to scale, north up, as the reference a FOC site plan is adapted from."
+        "what": "Fetch a real place's layout from OpenStreetMap (Overpass API) and draw it to scale, north up, as the reference a site plan is adapted from."
       },
       {
         "tool": "plan_refs.py",
@@ -175,11 +175,11 @@
     "tools": [
       {
         "tool": "compose_map.py",
-        "what": "Build a FOC map from a recipe (mod/maps_src/<name>.compose.json) by lifting whole levels or boxes out of other games' maps, converting their ids into FOC's (port_stamp.Converter), and adding FOC's own exits."
+        "what": "Build a map from a recipe (mod/maps_src/<name>.compose.json) by lifting whole levels or boxes out of other games' maps, converting their ids into the mod's (port_stamp.Converter), and adding the mod's own exits."
       },
       {
         "tool": "sitekit.py",
-        "what": "Design a FOC map in code and write it as a compose_map.py recipe."
+        "what": "Design a map in code and write it as a compose_map.py recipe."
       },
       {
         "tool": "mapbuild.py",
@@ -191,7 +191,7 @@
       },
       {
         "tool": "groundkit.py",
-        "what": "Learn how Fallout 2 lays its ground tiles, and grow new ground for FOC maps that follows the same rules: broken asphalt with sand in its edges, kerbs and sidewalk fragments, dirt worn round buildings, the way the Den, Klamath a..."
+        "what": "Learn how Fallout 2 lays its ground tiles, and grow new ground for mod maps that follows the same rules: broken asphalt with sand in its edges, kerbs and sidewalk fragments, dirt worn round buildings, the way the Den, Klamath a..."
       },
       {
         "tool": "tilewfc.py",
@@ -199,7 +199,7 @@
       },
       {
         "tool": "wallkit.py",
-        "what": "Learn how the original games and the total conversions build walls, so FOC's maps can draw their own buildings instead of copying them."
+        "what": "Learn how the original games and the total conversions build walls, so the mod's maps can draw their own buildings instead of copying them."
       },
       {
         "tool": "wallsets.py",
@@ -235,7 +235,7 @@
       },
       {
         "tool": "mapedit.py",
-        "what": "A prefab map editor for FOC."
+        "what": "A prefab map editor for the mod."
       }
     ]
   },
@@ -245,7 +245,7 @@
     "tools": [
       {
         "tool": "map_edges.py",
-        "what": "Give FOC's maps Hi-Res Patch edge files (maps/<name>.edg), so the camera stops at the edge of the painted ground and the void beyond is never seen."
+        "what": "Give the mod's maps Hi-Res Patch edge files (maps/<name>.edg), so the camera stops at the edge of the painted ground and the void beyond is never seen."
       },
       {
         "tool": "map_edge_blockers.py",
@@ -257,15 +257,15 @@
       },
       {
         "tool": "exit_layout.py",
-        "what": "Lay out each FOC map's exits and edge the way Fallout 2 does: Fallout 2's own exit prefabs (tools/exit_templates.json) at the edge box where each road leaves, a row of invisible block hexes along the rest of the box edge, and t..."
+        "what": "Lay out each mod map's exits and edge the way Fallout 2 does: Fallout 2's own exit prefabs (tools/exit_templates.json) at the edge box where each road leaves, a row of invisible block hexes along the rest of the box edge, and t..."
       },
       {
         "tool": "exit_templates.py",
-        "what": "Copy exit-grid prefabs out of Fallout 2's own maps, object for object, into tools/exit_templates.json, for tools/exit_layout.py to stamp onto FOC's maps."
+        "what": "Copy exit-grid prefabs out of Fallout 2's own maps, object for object, into tools/exit_templates.json, for tools/exit_layout.py to stamp onto the mod's maps."
       },
       {
         "tool": "exit_restyle.py",
-        "what": "Rebuild every exit-grid patch on FOC maps the way Fallout, Fallout 2 and the TCs lay them out."
+        "what": "Rebuild every exit-grid patch on mod maps the way Fallout, Fallout 2 and the TCs lay them out."
       },
       {
         "tool": "map_exits_to_edge.py",
@@ -277,7 +277,7 @@
       },
       {
         "tool": "check_links.py",
-        "what": "Check every way into and out of FOC maps."
+        "what": "Check every way into and out of mod maps."
       },
       {
         "tool": "map_trim.py",
@@ -305,11 +305,11 @@
       },
       {
         "tool": "remove_black_frames.py",
-        "what": "Take the black frame pieces (RPU's BLACK002 / BLACK003 scenery, drawn with gecko's Black Edge tool) off FOC's maps."
+        "what": "Take the black frame pieces (RPU's BLACK002 / BLACK003 scenery, drawn with gecko's Black Edge tool) off the mod's maps."
       },
       {
         "tool": "map_header.py",
-        "what": "Set a FOC map's header script and/or player start, in place."
+        "what": "Set a map's header script and/or player start, in place."
       },
       {
         "tool": "sync_maps.py",
@@ -339,23 +339,23 @@
       },
       {
         "tool": "port_bulk.py",
-        "what": "Port every distinct proto of the given types from one or more sources into FOC's own data in one pass, skipping anything whose ART is byte-identical to something FOC's data already has or that an earlier source in this same run..."
+        "what": "Port every distinct proto of the given types from one or more sources into the mod's own data in one pass, skipping anything whose ART is byte-identical to something the mod's data already has or that an earlier source in this same run..."
       },
       {
         "tool": "port_stamp.py",
-        "what": "Convert a gecko stamp saved while browsing another game (via tools/gecko_browse) into FOC's ID space, so it stamps the same thing in the FOC editing profile."
+        "what": "Convert a gecko stamp saved while browsing another game (via tools/gecko_browse) into the mod's ID space, so it stamps the same thing in the mod's editing profile."
       },
       {
         "tool": "tile_slots.py",
-        "what": "New floor and roof tiles for FOC, in slots of tiles.lst that hold nothing FOC can lose."
+        "what": "New floor and roof tiles for the mod, in slots of tiles.lst that hold nothing the mod can lose."
       },
       {
         "tool": "repack_art.py",
-        "what": "Move every piece of FOC art that something actually uses below the engine's 4096 art-index cap, swapping unused art up past it."
+        "what": "Move every piece of mod art that something actually uses below the engine's 4096 art-index cap, swapping unused art up past it."
       },
       {
         "tool": "fix_art_names.py",
-        "what": "Bring every FOC art filename within the engine's 12-char limit."
+        "what": "Bring every mod art filename within the engine's 12-char limit."
       },
       {
         "tool": "fonline2_source.py",
@@ -367,7 +367,7 @@
       },
       {
         "tool": "image_scenery.py",
-        "what": "Turn a picture of an object on a white background (a render or a photo) into a new FOC scenery piece shaded like Fallout 2's own pre-rendered art, with its own art and proto, and optionally a ground shadow object like the Pep G..."
+        "what": "Turn a picture of an object on a white background (a render or a photo) into a new mod scenery piece shaded like Fallout 2's own pre-rendered art, with its own art and proto, and optionally a ground shadow object like the Pep G..."
       },
       {
         "tool": "slice_building.py",
@@ -375,11 +375,11 @@
       },
       {
         "tool": "mirror_scenery.py",
-        "what": "Add a left-right mirrored copy of a scenery object as a new FOC piece: its own art and its own proto, the original left as it is."
+        "what": "Add a left-right mirrored copy of a scenery object as a new mod piece: its own art and its own proto, the original left as it is."
       },
       {
         "tool": "scale_scenery.py",
-        "what": "Add a bigger (or smaller) copy of a scenery object as a new FOC piece: its own art and its own proto, the original left as it is."
+        "what": "Add a bigger (or smaller) copy of a scenery object as a new mod piece: its own art and its own proto, the original left as it is."
       },
       {
         "tool": "scenery_text.py",
@@ -421,7 +421,7 @@
       },
       {
         "tool": "worldmap.py",
-        "what": "Register FOC maps with the engine (maps.txt / city.txt / map.msg) and fit worldmap.txt to FOC's West Texas worldmap art."
+        "what": "Register mod maps with the engine (maps.txt / city.txt / map.msg) and fit worldmap.txt to the mod's West Texas worldmap art."
       },
       {
         "tool": "validate.py",

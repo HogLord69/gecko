@@ -2,8 +2,8 @@
 """
 ids.py - the project's ID space.
 
-    python tools/ids.py                 show the map of base vs FOC ranges
-    python tools/ids.py --check         fail if the base has grown into a FOC range
+    python tools/ids.py                 show the map of base vs mod ranges
+    python tools/ids.py --check         fail if the base has grown into a mod range
 
 Fallout 2 identifies almost everything positionally:
 
@@ -23,12 +23,12 @@ THE PADDING SCHEME
 Our content starts at a FIXED ABSOLUTE index, with filler entries between the
 end of the base's list and that index:
 
-    [ base entries ][ filler ][ FOC entries ]
+    [ base entries ][ filler ][ mod entries ]
                               ^ always the same absolute index
 
 If RPU later adds entries, the filler shrinks and OUR indices do not move. That
 is the whole point - it makes base updates survivable instead of catastrophic.
-If the base ever grows past a FOC start, --check fails loudly rather than
+If the base ever grows past a mod start, --check fails loudly rather than
 letting IDs silently shift.
 """
 
@@ -44,7 +44,7 @@ from foclib import GameIndex, TYPE_NAME  # noqa: E402
 
 # --------------------------------------------------------------------------- ranges
 
-# Where FOC content begins in each positional space. Round numbers, chosen with
+# Where mod content begins in each positional space. Round numbers, chosen with
 # comfortable headroom over the RPU 2.4.33 baseline measured on 2026-08-26.
 FOC_START = {
     "script": 1600,        # base scripts.lst ends at 1558
@@ -191,7 +191,7 @@ def check(gi: GameIndex) -> list[str]:
         if used > start:
             problems.append(
                 f"{key}: base now occupies {used} entries, which has grown past "
-                f"the FOC start at {start}. Every FOC {key} ID after that point "
+                f"the mod's start at {start}. Every mod {key} ID after that point "
                 f"has shifted. Raise FOC_START['{key}'] and re-point existing "
                 f"content, or pin the base back."
             )
@@ -202,7 +202,7 @@ def report(gi: GameIndex) -> None:
     counts = base_counts(gi)
     print(f"base: {gi.base}")
     print()
-    print(f"{'space':16s} {'base uses':>10s} {'filler':>8s} {'FOC starts':>11s}")
+    print(f"{'space':16s} {'base uses':>10s} {'filler':>8s} {'mod starts':>11s}")
     print("-" * 50)
     for key in FOC_START:
         used = counts.get(key, 0)
@@ -212,14 +212,14 @@ def report(gi: GameIndex) -> None:
         print(f"{key:16s} {used:10d} {pad:8d} {start:11d}{flag}")
     print()
     print("Indices are 1-based line numbers for scripts and protos; GVARs are")
-    print("0-based positions. A FOC script at index 1600 is line 1600 of the")
+    print("0-based positions. A mod script at index 1600 is line 1600 of the")
     print("generated scripts.lst, and SCRIPT_FOC_x should be #defined as 1600.")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true",
-                    help="exit non-zero if the base has grown into a FOC range")
+                    help="exit non-zero if the base has grown into a mod range")
     ap.add_argument("--base", type=Path, default=None)
     args = ap.parse_args()
 
@@ -231,7 +231,7 @@ def main() -> int:
             for p in problems:
                 print("ERROR: " + p)
             return 1
-        print("ID space OK: base fits below every FOC start.")
+        print("ID space OK: base fits below every mod start.")
         return 0
 
     report(gi)

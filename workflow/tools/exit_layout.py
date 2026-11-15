@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-exit_layout.py - lay out each FOC map's exits and edge the way Fallout 2 does:
+exit_layout.py - lay out each mod map's exits and edge the way Fallout 2 does:
 Fallout 2's own exit prefabs (tools/exit_templates.json) at the edge box where each
 road leaves, a row of invisible block hexes along the rest of the box edge, and the
 arrival hexes a few steps in from the matching exit, facing into the map.

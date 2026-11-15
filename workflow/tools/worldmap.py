@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-worldmap.py - register FOC maps with the engine (maps.txt / city.txt / map.msg)
-and fit worldmap.txt to FOC's West Texas worldmap art.
+worldmap.py - register mod maps with the engine (maps.txt / city.txt / map.msg)
+and fit worldmap.txt to the mod's West Texas worldmap art.
 
-FOC's worldmap has only FOC locations: every base (vanilla/RPU) area is kept
+the mod's worldmap has only mod locations: every base (vanilla/RPU) area is kept
 as a hidden, locked section so area numbering never moves (hide_base_areas),
 and worldmap.txt's per-subtile data is flattened to match the replacement art
 (merged_worldmap_txt). Both are explained where the constants are defined.
@@ -13,14 +13,14 @@ and worldmap.txt's per-subtile data is flattened to match the replacement art
 
 Why this exists: deploy.py writes the ID-space files (scripts.lst, vault13.gam,
 proto/art .lst) but nothing yet generated data\\maps.txt, data\\city.txt or
-text\\english\\game\\map.msg - so FOC maps were invisible to the worldmap and
+text\\english\\game\\map.msg - so mod maps were invisible to the worldmap and
 had no names in saves/automap. A map is unreachable until it is in maps.txt AND
 a city.txt area points an entrance at it.
 
 ENGINE SEMANTICS (verified in reference/fallout2-ce/src/worldmap.cc, map.cc):
 
   * maps.txt is read densely from [Map 000]: wmMapInit loops mapIdx from 0
-    until a section lacks "lookup_name", so there can be NO GAPS - a FOC map
+    until a section lacks "lookup_name", so there can be NO GAPS - a map
     at id 200 needs sections 0..200 all present. The gap 173..199 is written
     as harmless reserved sections (never entered).
   * map getmsg ids are map * 3 + elevation + 200 in map.msg; city names /
@@ -90,13 +90,13 @@ WORLDMAP_VFS = "data\\worldmap.txt"
 # state directly when the car runs dry, bypassing the lock anyway.
 BASE_AREAS_LEFT_ALONE = {21}
 
-# FOC's worldmap art (mod/data/art/intrface/WRLDMP00..19.FRM, 4x5 tiles of
+# the mod's worldmap art (mod/data/art/intrface/WRLDMP00..19.FRM, 4x5 tiles of
 # 350x300) is West Texas, not California, so the base's per-subtile data in
 # worldmap.txt no longer matches anything under it: its walk masks would wall
 # off "ocean" in the middle of the desert, Mountain/Ocean terrain would slow
 # travel over flat ground, and its encounter tables are vanilla regions (Arroyo,
 # Navarro, NCR...) with vanilla special encounters. Every subtile becomes
-# Desert and rolls FOC's own encounter table (FOC_ENCOUNTER_TABLE, added after
+# Desert and rolls the mod's own encounter table (FOC_ENCOUNTER_TABLE, added after
 # the base's tables by merged_worldmap_txt) at SUBTILE_FREQ ([Data]: Rare = 6%
 # per check).
 SUBTILE_TERRAIN = "Desert"
@@ -108,7 +108,7 @@ SUBTILE_FREQ = "Rare"
 #
 # Every critter needs its encounter script (Script:N is the scripts.lst LINE):
 # without one it just stands there. Vanilla's "Dog" and "Rad_Scorpions"
-# groups have none, so FOC brings its own (FOC_ENCOUNTER_GROUPS: ECWldDog 632,
+# groups have none, so the mod brings its own (FOC_ENCOUNTER_GROUPS: ECWldDog 632,
 # ECScorp 616). Geckos are Easy_Gecko (ZCGecko 270), brahmin Brahmin
 # (ZCBrahmn 203). The enc_NN numbers must run without gaps.
 FOC_ENCOUNTER_NAME = "FOC_Basin"
@@ -148,12 +148,12 @@ SUBTILE_COLS, SUBTILE_ROWS = 7, 6      # SUBTILE_GRID_WIDTH x HEIGHT, key "col_r
 SPHERE_PX = {"small": 12, "medium": 25, "large": 49}
 
 # Reserved sections between the base's last map id and FOC_START['map'].
-# They exist so a FOC map's section index equals its id when maps.txt is read
+# They exist so a map's section index equals its id when maps.txt is read
 # densely from 0. They are never entered (no entrance references them).
 RESERVED_MAP = "focrsvd"
-RESERVED_NAME = "FOC reserved"
+RESERVED_NAME = "mod reserved"
 
-# Default ambience for a FOC village - copied from RPU's Arroyo section.
+# Default ambience for a village - copied from RPU's Arroyo section.
 DEFAULT_AMBIENT = ("gntlwin1:25, gntlwind:25, dogbark:20, dogbark1:20, "
                    "gustwind:5, gustwin1:5")
 
@@ -330,7 +330,7 @@ def _count_sections(gi: GameIndex, vfs_path: str, rx: str, what: str) -> int:
     try:
         text = gi.vfs.read_text(vfs_path)
     except FileNotFoundError as e:
-        raise WorldmapError(f"cannot register FOC maps: base has no {vfs_path} "
+        raise WorldmapError(f"cannot register mod maps: base has no {vfs_path} "
                             f"({e}); nothing to extend")
     ids = [int(m) for m in re.findall(rx, text, re.I)]
     if not ids:
@@ -351,7 +351,7 @@ def _map_section(rec: dict) -> list[str]:
     s = rec["settings"]
     if rec["id"] < FOC_START["map"]:
         raise WorldmapError(
-            f"map {rec['filename']}: id {rec['id']} is below the FOC map "
+            f"map {rec['filename']}: id {rec['id']} is below the mod's map "
             f"start {FOC_START['map']}")
     stem = Path(rec["filename"]).stem.lower()
     lines = [f"[Map {rec['id']:03d}]"]
@@ -435,9 +435,9 @@ def merged_maps_txt(gi: GameIndex, registry: list[dict] | None = None) -> str:
             f"existing maps")
 
     # The engine reads maps.txt densely from [Map 000] and stops at the first
-    # section without a lookup_name, so EVERY id from n up to the last FOC map
+    # section without a lookup_name, so EVERY id from n up to the last mod map
     # must have a section - both the n..FOC_START filler and any gaps BETWEEN
-    # registered FOC maps (e.g. 201..206 when only 200 and 207 are built).
+    # registered mod maps (e.g. 201..206 when only 200 and 207 are built).
     by_id = {rec["id"]: rec for rec in registry}
     last = max([FOC_START["map"] - 1, *by_id]) if by_id else FOC_START["map"] - 1
 
@@ -505,7 +505,7 @@ def merged_map_msg(gi: GameIndex, registry: list[dict] | None = None) -> str:
 
 
 def _foc_tile_section(sec: str) -> str:
-    """One base [Tile N] section rewritten for FOC's art (see SUBTILE_TERRAIN)."""
+    """One base [Tile N] section rewritten for the mod's art (see SUBTILE_TERRAIN)."""
     name = re.match(r"\[Tile\s+\d+\]", sec).group(0)
     art = re.search(r"(?mi)^\s*art_idx\s*=\s*(\d+)", sec)
     if art is None:
@@ -527,7 +527,7 @@ def _foc_tile_section(sec: str) -> str:
 
 def merged_worldmap_txt(gi: GameIndex) -> str:
     """
-    The base worldmap.txt with every [Tile N] section replaced for FOC's art:
+    The base worldmap.txt with every [Tile N] section replaced for the mod's art:
     same art_idx (the WRLDMP tiles are replaced by name), no walk mask, flat
     desert, no random encounters. Everything before the tiles (frequencies,
     terrain types, random-map lists, encounter tables) is kept verbatim.
@@ -549,7 +549,7 @@ def merged_worldmap_txt(gi: GameIndex) -> str:
                 table_at = len(out)
             out.append(sec)
     if tiles != 20:
-        raise WorldmapError(f"base worldmap.txt has {tiles} tiles; FOC's art has 20")
+        raise WorldmapError(f"base worldmap.txt has {tiles} tiles; the mod's art has 20")
     if last_table < 0:
         raise WorldmapError("base worldmap.txt has no [Encounter Table N] sections")
     # the engine reads tables by number until one is missing, so ours is the next
@@ -561,7 +561,7 @@ def merged_worldmap_txt(gi: GameIndex) -> str:
 
 
 def foc_encounter_table_number(gi: GameIndex) -> int:
-    """The number merged_worldmap_txt gives FOC's table: one past the base's last."""
+    """The number merged_worldmap_txt gives the mod's table: one past the base's last."""
     nums = [int(n) for n in re.findall(r"(?m)^\[Encounter Table\s+(\d+)\]",
                                        gi.vfs.read_text(WORLDMAP_VFS))]
     if not nums:
@@ -570,7 +570,7 @@ def foc_encounter_table_number(gi: GameIndex) -> int:
 
 
 def merged_worldmap_msg(gi: GameIndex) -> str:
-    """The base worldmap.msg plus the "You encounter: ..." names of FOC's table.
+    """The base worldmap.msg plus the "You encounter: ..." names of the mod's table.
     Without them the engine prints "Error" in the message window."""
     enc_lines = [l for l in FOC_ENCOUNTER_TABLE if l.startswith("enc_")]
     if len(enc_lines) != len(FOC_ENCOUNTER_TEXT):
@@ -613,7 +613,7 @@ def check(gi: GameIndex, registry: list[dict] | None = None) -> list[str]:
         seen_ids.add(mid)
         if mid < FOC_START["map"]:
             problems.append(
-                f"map {rec['filename']}: id {mid} is below FOC map start "
+                f"map {rec['filename']}: id {mid} is below mod map start "
                 f"{FOC_START['map']}")
         if mid < base_maps:
             problems.append(
@@ -696,7 +696,7 @@ def check(gi: GameIndex, registry: list[dict] | None = None) -> list[str]:
                 f"map.msg is missing area-name entry {{1500+{aid}}} for "
                 f"{owner['filename']}")
 
-    # --- no base area can show up on FOC's map
+    # --- no base area can show up on the mod's map
     base_ids = (set(range(base_areas)) - BASE_AREAS_LEFT_ALONE) if _config.own_worldmap() else set()
     for area_id in sorted(base_ids & set(areas)):
         if areas[area_id]["start_state"].lower() != "off":
@@ -707,7 +707,7 @@ def check(gi: GameIndex, registry: list[dict] | None = None) -> list[str]:
     if base_ids - locked:
         problems.append(f"city.txt base areas not locked: {sorted(base_ids - locked)}")
 
-    # --- worldmap.txt + FOC's worldmap art
+    # --- worldmap.txt + the mod's worldmap art
     try:
         wm = merged_worldmap_txt(gi) if _config.own_worldmap() else ""
         if re.search(r"(?mi)^\s*walk_mask_name", wm):
@@ -718,7 +718,7 @@ def check(gi: GameIndex, registry: list[dict] | None = None) -> list[str]:
     for t in (range(20) if _config.own_worldmap() else ()):
         p = art_dir / f"WRLDMP{t:02d}.FRM"
         if not p.is_file():
-            problems.append(f"FOC worldmap tile {p.name} missing from mod/data/art/intrface")
+            problems.append(f"mod worldmap tile {p.name} missing from mod/data/art/intrface")
             continue
         w, h = struct.unpack_from(">HH", p.read_bytes(), 0x3E)
         if (w, h) != (350, 300):
@@ -801,13 +801,13 @@ def main() -> int:
         for p in problems:
             print("ERROR: " + p)
         if not problems:
-            print(f"worldmap: {len(registry)} FOC map(s) registered over a "
+            print(f"worldmap: {len(registry)} mod map(s) registered over a "
                   f"base of {base_map_count(gi)} maps / "
                   f"{base_area_count(gi)} areas")
         return 1 if problems else 0
 
     print(f"base: {base_map_count(gi)} maps, {base_area_count(gi)} areas, "
-          f"{len(registry)} FOC map(s)")
+          f"{len(registry)} mod map(s)")
     for i, (owner, members) in enumerate(area_groups(registry)):
         area = base_area_count(gi) + i
         print(f"  area {area} {owner['settings'].get('area_name', owner['name'])!r} "

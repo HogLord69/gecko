@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 exit_templates.py - copy exit-grid prefabs out of Fallout 2's own maps, object for
-object, into tools/exit_templates.json, for tools/exit_layout.py to stamp onto FOC's
+object, into tools/exit_templates.json, for tools/exit_layout.py to stamp onto the mod's
 maps.
 
     python tools/exit_templates.py

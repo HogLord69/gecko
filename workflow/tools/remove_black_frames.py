@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 remove_black_frames.py - take the black frame pieces (RPU's BLACK002 / BLACK003
-scenery, drawn with gecko's Black Edge tool) off FOC's maps.
+scenery, drawn with gecko's Black Edge tool) off the mod's maps.
 
     python tools/remove_black_frames.py --dry-run
     python tools/remove_black_frames.py

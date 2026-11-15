@@ -8,7 +8,7 @@ floor painted out past their boxes.
     python tools/paint_corners.py --write Clairemont.map LAMESA.MAP RWRUINS.MAP
 
 Why: across about 1,200 boxes in Fallout, Fallout 2 and the TCs (tools/edge_survey.py),
-a box never covers void; 30-68% of the floor lies beyond it. Some of FOC's maps end
+a box never covers void; 30-68% of the floor lies beyond it. Some of the mod's maps end
 their floor so close to the town that the box has to take in a few corners of void.
 
 How (not the rejected 2026-10-03 fill, which picked each new tile at random from the

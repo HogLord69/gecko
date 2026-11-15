@@ -10,14 +10,14 @@ The engine reads data\\quests.txt (pipboy.cc): one line per entry,
     location, description, gvar, display_threshold, completed_threshold
 
 where location is a map.msg line (the area name, 1500 + area) and description
-a quests.msg line. FOC writes the map file and the GVAR name instead, so
+a quests.msg line. The mod writes the map file and the GVAR name instead, so
 neither number has to be kept in step by hand: the area comes from
 worldmap.area_groups (the same numbering deploy writes into city.txt) and the
 GVAR from mod/ids/gvars.txt. deploy.py writes the result; the text lives in
 mod/data/text/english/game/quests.msg and is copied as it is.
 
-FOC ships only its own entries. The base's quests.txt is all vanilla quests on
-vanilla variables, which nothing in FOC should ever show.
+the mod ships only its own entries. The base's quests.txt is all vanilla quests on
+vanilla variables, which nothing in the mod should ever show.
 """
 
 from __future__ import annotations

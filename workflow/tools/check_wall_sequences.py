@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-check_wall_sequences.py - check a FOC map's walls of one set against the
+check_wall_sequences.py - check a map's walls of one set against the
 originals' sequences (tools/wall_sequences.py's build/wall_sequences/<set>.json):
 every pair of neighbouring pieces along an x-run (x, x+1) and a y-run (y, y+1)
 should be a pair the originals use somewhere. Lists the ones they never use.

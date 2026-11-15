@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-fix_art_names.py - bring every FOC art filename within the engine's 12-char limit.
+fix_art_names.py - bring every mod art filename within the engine's 12-char limit.
 
     python tools/fix_art_names.py [--apply]
 
@@ -25,7 +25,7 @@ WHAT IT DOES
     1. picks a <=12-char name:  <1-char source tag><first 7 chars of the base>.frm
        (sonora->s, nevada->n, olympus->o, resurrection->r), disambiguating
        collisions with a base-36 counter, checked against the base game's own
-       list, every other FOC entry and the files already on disk;
+       list, every other mod entry and the files already on disk;
     2. renames the file in mod/data/art/<dir>/ AND base/mods/foc/art/<dir>/;
     3. rewrites mod/ids/art_<dir>.txt line-for-line (indices never move);
     4. regenerates base/mods/foc/art/<dir>/<dir>.lst with deploy.py's renderer;

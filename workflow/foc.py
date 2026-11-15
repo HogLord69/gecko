@@ -210,7 +210,7 @@ def menu() -> int:
         ("Open gecko on another game (look, save stamps)", browse),
         ("List the tools", list_tools),
     ]
-    print("FOC map workflow\n")
+    print("Map workflow\n")
     for i, (label, _) in enumerate(items, 1):
         print(f"  {i}  {label}")
     print("  q  Quit\n")

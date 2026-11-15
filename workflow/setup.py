@@ -204,7 +204,7 @@ def main() -> int:
     args = ap.parse_args()
     yes = args.yes
 
-    say("FOC map workflow - setup\n")
+    say("Map workflow - setup\n")
     say("1. Python")
     py_ok = check_python(yes, args.no_pip)
 

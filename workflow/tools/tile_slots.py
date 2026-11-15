@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-tile_slots.py - new floor and roof tiles for FOC, in slots of tiles.lst that
-hold nothing FOC can lose.
+tile_slots.py - new floor and roof tiles for the mod, in slots of tiles.lst that
+hold nothing the mod can lose.
 
     python tools/tile_slots.py --list                     # how many slots are left
     python tools/tile_slots.py --port nevada bport001.frm bport002.frm ...
@@ -12,10 +12,10 @@ A map square stores a 12-bit tile id, so tiles.lst can never pass 4096 lines,
 and the base list already has 4077 (CLAUDE.md 4d). But not every line is a
 picture of its own: some repeat a tile that an earlier line already draws (one
 picture sits on 114 lines), and two have no art at all. Those lines are spare
-as long as nothing of FOC's points at them. A slot is taken when it is
+as long as nothing of the mod's points at them. A slot is taken when it is
   - the first line of its picture (that one stays), or ids 0 and 1;
   - used by a map in mod/data/maps or base/mods/foc/maps;
-  - used by any stamp in gecko's patterns folder (a stamp made in the FOC
+  - used by any stamp in gecko's patterns folder (a stamp made in the mod's
     profile could hold it);
   - already given a new tile (mod/ids/art_tiles_slots.txt).
 Every other spare line can take a new tile without changing anything that is
@@ -23,11 +23,11 @@ drawn today.
 
 mod/ids/art_tiles_slots.txt holds "<tile id>,<file name>" per new tile;
 tools/lists.py puts those names on those lines of the tiles.lst deploy.py
-ships, so the game and gecko's FOC profile both see them. The art itself
+ships, so the game and gecko's editing profile both see them. The art itself
 goes to mod/data/art/tiles/ and into the ledger (mod/assets.csv).
 
 port_stamp.py ports a stamp's missing tiles through here instead of swapping
-them for the nearest-looking FOC tile, while slots last.
+them for the nearest-looking mod tile, while slots last.
 """
 from __future__ import annotations
 

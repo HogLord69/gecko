@@ -172,7 +172,7 @@ class ArtCache:
         if d is None:
             return (None, 0, 0)
         lst = self.art_list(d)
-        # the index is 24-bit (FOC's art lists pass 4096 before repack_art.py);
+        # the index is 24-bit (the mod's art lists pass 4096 before repack_art.py);
         # a critter's fid keeps its animation in bits 16-23
         i = fid & (0xFFF if obj_type == OBJ_TYPE_CRITTER else 0xFFFFFF)
         if not (0 <= i < len(lst)) or not lst[i]:
@@ -406,7 +406,7 @@ def main() -> int:
     ap.add_argument("--fragment", help="render a corpus fragment by id")
     ap.add_argument("--base", type=Path, default=None)
     ap.add_argument("--source", help="render using another install's art")
-    ap.add_argument("--foc", action="store_true", help="the game as deployed, with FOC's own art and protos (a FOC map)")
+    ap.add_argument("--foc", action="store_true", help="the game as deployed, with the mod's own art and protos (a map)")
     args = ap.parse_args()
 
     if args.source:

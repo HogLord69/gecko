@@ -16,7 +16,7 @@
     "credit": "Black Isle / Interplay; RP by killap, RPU maintained by BGforge. killap's source readme asks for a mention in the readme of derived work.",
     "notes": "This is what base/ was built from. Usually read the base copy instead.",
     "palette": false,
-    "palette_note": "the game FOC is built on: its pieces are already in the palette"
+    "palette_note": "Fallout 2 itself: its pieces are already in the palette"
   },
   "fo1": {
     "project": "Fallout (GOG), with the High Resolution Patch",
@@ -41,9 +41,7 @@
     "project": "Olympus 2207 (Full Edition)",
     "path": "",
     "credit": "Olympus 2207 v1.2, Nebesa Games 2010-2015: Artem \"Rainman\" Samoilov (lead design), Alexander \"Saur\" Berezin (lead artist), Sergey \"Zoomer\" Bokarev (dialogue, design), Elena Samoilova; English translation by keyboard gecko (per data/text/english/credits.txt). This Full Edition is Foxx's unofficial build; its license.txt allows personal, non-commercial use only. Ask before a public release.",
-    "notes": "11383 FRMs, 2959 scenery protos - the best art source on this machine.",
-    "palette": false,
-    "palette_note": "the owner's rule: no Olympus assets in FOC (its art style clashes)"
+    "notes": "11383 FRMs, 2959 scenery protos - the best art source on this machine."
   },
   "resurrection": {
     "project": "Fallout: Resurrection (Full Edition), English-patched",
@@ -75,6 +73,6 @@
     "derived": true,
     "overlay": "foc",
     "credit": "TODO - FOnline 2 (fonline2.com, Season 4 client) and the many community artists whose work it carries; provenance inside the pack is mixed, so check per asset before shipping anything from here. Its music albums are third-party fan work and are not converted. Ask before a public release.",
-    "notes": "ART ONLY, and only what we do not already own: tools/fonline2_source.py skips every picture that exists in FOC, Fallout 1/2 or any TC (by pixels, not name). No maps or protos in the client; protos here are generated templates. Static walls/scenery have no placement offsets in the client, so theirs are estimated (build/fonline2/catalog.csv says which). Tiles are browse-only (4096-slot limit)."
+    "notes": "ART ONLY, and only what we do not already own: tools/fonline2_source.py skips every picture that exists in the mod, Fallout 1/2 or any TC (by pixels, not name). No maps or protos in the client; protos here are generated templates. Static walls/scenery have no placement offsets in the client, so theirs are estimated (build/fonline2/catalog.csv says which). Tiles are browse-only (4096-slot limit)."
   }
 }

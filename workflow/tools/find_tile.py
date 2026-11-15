@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-find_tile.py - list FOC floor/roof tile ids by name prefix (ids below 4096,
+find_tile.py - list mod floor/roof tile ids by name prefix (ids below 4096,
 the only ones gecko and the engine can address).
 
     python tools/find_tile.py cav mine dirt

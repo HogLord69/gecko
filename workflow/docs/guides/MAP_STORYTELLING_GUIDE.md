@@ -1,6 +1,6 @@
 # Map Storytelling Guide
 
-How Fallout 1, Fallout 2 and the total conversions make a map look post-apocalyptic and tell its story without a word of dialogue, and how FOC's maps do the same. It comes from two studies:
+How Fallout 1, Fallout 2 and the total conversions make a map look post-apocalyptic and tell its story without a word of dialogue, and how the mod's maps do the same. It comes from two studies:
 
 - **Measured.** `tools/story_survey.py` classified every object on 1,297 maps (FO1, FO2, Sonora, Nevada, Resurrection, Story of the Jackal, Yesterday, Olympus) by its in-game name. It found 4,340 vignettes, the small composed scenes of three or more story objects. Results are in `build/story_survey/`.
 - **Looked at.** Close-ups of those scenes (`tools/story_crops.py`) and whole-town renders: the Den, Klamath, Broken Hills, Modoc, Junktown, the Hub, Sonora's Inferno City, Nevada's Beatty, Resurrection's Albuquerque, Fort Desolation and others.
@@ -19,7 +19,7 @@ Every settlement in the originals is one of three, and its materials say which a
 | **Built from nothing** | No pavement at all. Plank buildings round an open common with the well or water tank in it. Pens, crops and dead-tree groves, with one stone or plaster building as the landmark. | Modoc, Beatty's shacks, Broken Hills' outskirts |
 | **A compound** | A pre-war or military site held by one group behind a wall: scrap sheet, razor wire, sandbags, a gate with a guard and a painted sign. Inside, it is orderly and has a purpose. | Fort Desolation, Vault City's courtyard, Navarro, NCR's entrance |
 
-**Rule:** decide which kind a FOC location is before laying a tile. Its walls, ground and fences all follow from that choice.
+**Rule:** decide which kind a location is before laying a tile. Its walls, ground and fences all follow from that choice.
 
 ## 2. The language of decay
 
@@ -139,7 +139,7 @@ So the scenes are social: **fire draws people, people draw stores and trash.**
 - **The town's economy is a physical thing on the map** (mine, wrecking yard, pens, stalls).
 - **People stand in small groups at doors and round fire barrels**, not spread evenly.
 
-## 7. Rules for FOC maps
+## 7. Rules for mod maps
 
 1. Choose the kind of place (§1). Every material follows from it.
 2. Decay works outward from the centre: intact core, then roofless shells, then wall stubs, then desert. Pavement survives in islands, kerbs and sidewalks against walls.
@@ -150,4 +150,4 @@ So the scenes are social: **fire draws people, people draw stores and trash.**
 7. One landmark, in a different material. The economy is visible.
 8. Ruined rooms hold rubble. Lived-in rooms are furnished for one job.
 
-Every FOC site plan lists its vignettes ("stories" in the plan file), drawn as numbered markers. The map is built with them.
+Every mod site plan lists its vignettes ("stories" in the plan file), drawn as numbered markers. The map is built with them.

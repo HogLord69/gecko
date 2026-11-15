@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-repack_art.py - move every piece of FOC art that something actually uses below
+repack_art.py - move every piece of mod art that something actually uses below
 the engine's 4096 art-index cap, swapping unused art up past it.
 
     python tools/repack_art.py --dry-run
@@ -13,7 +13,7 @@ with 0xFFF), so an art .lst entry at index 4096 or above is unreachable in-game:
 a proto or map object pointing there draws `index & 0xFFF`, an unrelated sprite.
 gecko does not mask, so such an object looks right in the editor and wrong in
 the game. The bulk ports (port_bulk.py) put thousands of TC scenery and wall
-pieces into mod/ids/art_*.txt - far more than fit under the cap - while FOC's
+pieces into mod/ids/art_*.txt - far more than fit under the cap - while the mod's
 maps and stamps use only a small fraction of them.
 
 So the lists are REPACKED rather than pruned: art something uses is guaranteed
@@ -23,14 +23,14 @@ above the cap and re-running this tool swaps it down.
 
 WHAT COUNTS AS USED
 -------------------
-  * every object (and inventory object) in every FOC map file, in both
+  * every object (and inventory object) in every mod map file, in both
     base/mods/foc/maps and mod/data/maps, backups included (a restored backup
     must still draw the right art): its own FID and its proto's FID
   * every gecko stamp in the patterns folder (not _tc_originals, which are in
     their source game's ID space), and every stamp in the Desktop 'Gecko
     Stamps*' folders tools/building_stamps.py writes (gecko reads those
     through junctions in the patterns folder): frmPid and the proto's FID
-  * every FOC proto a script names by its PID_* define in scripts_src
+  * every mod proto a script names by its PID_* define in scripts_src
 
 WHAT GETS REWRITTEN
 -------------------
@@ -133,7 +133,7 @@ def all_objects(m: MapFile):
 
 
 class Protos:
-    """FOC proto FIDs, read from the authored tree (base protos as fallback)."""
+    """Mod proto FIDs, read from the authored tree (base protos as fallback)."""
 
     def __init__(self):
         self.gi = GameIndex()
@@ -163,7 +163,7 @@ class Protos:
 
 
 def script_pids() -> set[int]:
-    """PIDs of FOC protos that a script names via a foc_ids.h define."""
+    """PIDs of mod protos that a script names via a foc_ids.h define."""
     if not FOC_IDS_H.is_file():
         return set()
     defs = {}
@@ -389,7 +389,7 @@ def main() -> int:
         n_reg = len(registry_split(IDS / f"{key}.txt")[1])
         start = FOC_START[key] - 1
         foc_used = sum(1 for i in used[d] if i >= start)
-        print(f"  art/{d}: {n_reg} FOC entries, {foc_used} used, "
+        print(f"  art/{d}: {n_reg} mod entries, {foc_used} used, "
               f"{len(pairs)} used entr{'y' if len(pairs) == 1 else 'ies'} above {ART_INDEX_CAP} to move down")
         if pairs:
             t = {}

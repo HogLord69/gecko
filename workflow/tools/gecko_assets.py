@@ -37,7 +37,7 @@ gecko needs around them:
       flat     the Pep Gas sign's shadow (GASSIGN2, 0x020004DF): flat on the ground,
                walked and shot over, drawn under everything standing
   * a name check stronger than the tools' own: 8 letters, lower case, and not
-    the name of ANY scenery art the game can see. A FOC file named like a
+    the name of ANY scenery art the game can see. A mod file named like a
     vanilla one (car1.frm) would replace the vanilla picture everywhere.
   * the preview: the piece standing on its hex, on a hex grid, beside the
     vanilla player (HMJMPSAA) for scale, drawn the way the engine places a
@@ -156,7 +156,7 @@ class Refused(Exception):
 # ------------------------------------------------------------------------------ names
 
 def scenery_names_taken(gi: GameIndex) -> set[str]:
-    """Every scenery art file name the game sees, plus FOC's registered and written ones."""
+    """Every scenery art file name the game sees, plus the mod's registered and written ones."""
     taken = {n.lower() for n in parse_lst(gi.vfs.read("art\\scenery\\scenery.lst"))}
     taken |= {l.strip().lower() for l in (IDS / "art_scenery.txt").read_text().splitlines()
               if l.strip() and not l.startswith("#")}
@@ -220,7 +220,7 @@ def read_text_rows() -> list[tuple[Path, int, int, str, str]]:
 
 def known_text_for(type_dir: str, name: str, rows) -> str | None:
     """The examine text a name already has within a type: from the tables, else from
-    the FOC description registry (port.msg_desc_path)."""
+    the mod's description registry (port.msg_desc_path)."""
     want = name.strip().lower()
     for _, _, pid, n, t in rows:
         if TYPE_DIR.get(pid >> 24) == type_dir and n.lower() == want:

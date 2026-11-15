@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-mapedit.py - a prefab map editor for FOC.
+mapedit.py - a prefab map editor.
 
     python tools/mapedit.py                      new empty desert map
     python tools/mapedit.py --map mod/data/maps/REDWELL.MAP

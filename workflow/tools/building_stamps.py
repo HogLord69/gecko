@@ -19,7 +19,7 @@ more. Only the building comes across:
   * container items inside it (bookcases, desks, lockers); no loose loot
   * no critters, no misc (exit grids, scroll blockers, spatial markers)
 
-Stamps store raw ids and are read in FOC's editing profile, whose base is
+Stamps store raw ids and are read in the mod's editing profile, whose base is
 Fallout 2 + RPU, so Fallout 2 ids are kept as they are. Fallout 1 ids go
 through port_stamp.Converter (by pid where the art matches, by art bytes
 otherwise); anything that would need a port is dropped, not ported, and
@@ -192,7 +192,7 @@ def extract(gi: GameIndex, m: MapFile, ei: int, raw: bytes, wl, sc, it):
 
 # wall family -> construction folder. A building goes in the folder most of
 # its walls belong to, counted per folder (classify), from the art the stamp
-# actually uses: FOC's own names, with the one-letter tag ported art carries
+# actually uses: the mod's own names, with the one-letter tag ported art carries
 # (ids.SOURCE_TAG: s Sonora, n Nevada, o Olympus, r Resurrection) stripped.
 FAMILIES = {
     # FO2's nec set is dark concrete panels and brick bases, often both in one building
@@ -217,7 +217,7 @@ FITTINGS = {"bar", "black", "pap", "pac", "pbp", "pbc", "pbm", "rl", "rustb", "i
             "poptr", "cwall"}
 TAGS = "snor"
 # ported art whose name is a vanilla family's but whose look isn't, checked
-# by its full FOC name (tag included) before the tag is stripped. Checked by
+# by its full mod name (tag included) before the tag is stripped. Checked by
 # eye against contact sheets of every stamp, 2026-10-01.
 TAGGED = {
     "oadb": "Brick & Concrete",      # Olympus "adb": dark concrete panels, not adobe
@@ -230,7 +230,7 @@ TAGGED = {
     "sher": "Corrugated Metal",      # rusty corrugated sheet
 }
 # single stamps the wall count gets wrong, by (game, map, elevation, anchor
-# hex): the numbering differs between FOC and native ids, the anchor doesn't
+# hex): the numbering differs between the mod and native ids, the anchor doesn't
 STAMP_FOLDER = {
     ("Olympus", "RBFABRIC", 0, 19288): "Corrugated Metal",   # dark metal panels; its ocarw is trim
     # Sonora's "nuev" set: these are braced and riveted metal panels, not plaster
@@ -287,7 +287,7 @@ SIZES = [(60, "Small"), (150, "Medium"), (400, "Large"), (10 ** 9, "Huge")]
 
 
 def foc_only(pro: int, frm: int) -> bool:
-    """An id past the base game's lists: only FOC has it."""
+    """An id past the base game's lists: only the mod has it."""
     from ids import FOC_START
     t = (pro >> 24) & 0xF
     pk = {0: "proto_items", 2: "proto_scenery", 3: "proto_walls", 5: "proto_misc"}.get(t)
@@ -301,8 +301,8 @@ def size_name(n: int) -> str:
 
 
 class Ids:
-    """Source ids -> FOC ids. Fallout 2 maps are read from FOC's own base, so
-    their ids are already FOC's. Fallout 1 goes through port_stamp.Converter
+    """Source ids -> mod ids. Fallout 2 maps are read from the mod's own base, so
+    their ids are already the mod's. Fallout 1 goes through port_stamp.Converter
     in dry-run mode: a piece that would need porting is dropped."""
 
     def __init__(self, src: str, gi: GameIndex, foc: GameIndex, native: bool = False):
@@ -323,7 +323,7 @@ class Ids:
     def obj(self, o):
         if self.conv is None:
             return o.pid, o.fid
-        # Same pid in FOC drawing byte-identical art: keep it (Fallout 1 and 2
+        # Same pid in mod drawing byte-identical art: keep it (Fallout 1 and 2
         # share names for art that differs - Shady Sands' adobe is not
         # Arroyo's - so the name alone is not enough).
         t = pid_type(o.pid)
@@ -381,7 +381,7 @@ def write(sources, out: Path, native: bool = False, portable: bool = False) -> N
     for src in sources:
         gi = GameIndex() if src == "fo2" else port.open_source(src)
         ids = Ids(src, gi, foc, native)
-        # construction is judged on FOC's copy of the art, in every id mode,
+        # construction is judged on the mod's copy of the art, in every id mode,
         # so the shared native sets sort exactly like the checked library
         ids_cls = Ids(src, gi, foc, False) if native else ids
         wl = parse_lst(gi.vfs.read("art\\walls\\walls.lst"))
@@ -407,7 +407,7 @@ def write(sources, out: Path, native: bool = False, portable: bool = False) -> N
                     ax = min(x for x, _ in roof) * 2
                     ay = min(y for _, y in roof) * 2
                     objs = []
-                    missing = 0          # any piece FOC has no art for: not a complete building
+                    missing = 0          # any piece the mod has no art for: not a complete building
                     for o in keep:
                         r = ids.obj(o)
                         if r is None:
@@ -421,7 +421,7 @@ def write(sources, out: Path, native: bool = False, portable: bool = False) -> N
                         # a building with holes is worse than none
                         incomplete.append(f"{mname} ({missing} pieces)")
                         continue
-                    # sort by the art the stamp really uses (FOC ids), not the
+                    # sort by the art the stamp really uses (mod ids), not the
                     # source game's names: TCs name byte-identical walls differently
                     if native:
                         walls_foc = []
@@ -472,8 +472,8 @@ def write(sources, out: Path, native: bool = False, portable: bool = False) -> N
                     counts[(folder, size, floor_name)] += 1
                     manifest.append((folder, size, floor_name, name, len(roof), len(objs)))
         print(f"{src}: {sum(per_map.values())} stamps; {len(incomplete)} buildings skipped as "
-              f"incomplete (art FOC does not have)")
-    print(f"duplicates skipped: {counts['duplicate']}; FOC-only ids skipped: {counts['foc_only']}; "
+              f"incomplete (art the mod does not have)")
+    print(f"duplicates skipped: {counts['duplicate']}; mod-only ids skipped: {counts['foc_only']}; "
           f"not complete: {dict(REJECTS)}")
     REJECTS.clear()
     for (folder, size, fl_), n in sorted((k, v) for k, v in counts.items() if isinstance(k, tuple)):
@@ -525,7 +525,7 @@ def main() -> int:
     ap.add_argument("--native", action="store_true",
                     help="keep each game's own ids (for someone who opens that game in gecko)")
     ap.add_argument("--portable", action="store_true",
-                    help="skip stamps that use ids only FOC has (for sharing the Fallout 1 & 2 set)")
+                    help="skip stamps that use ids only the mod has (for sharing the Fallout 1 & 2 set)")
     ap.add_argument("--no-size", action="store_true",
                     help="folders are construction / floor, without the size level")
     ap.add_argument("--no-floor", action="store_true",

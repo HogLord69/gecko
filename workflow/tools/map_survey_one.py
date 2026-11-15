@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-map_survey_one.py - measure one FOC map the way map_survey.py measures the
+map_survey_one.py - measure one mod map the way map_survey.py measures the
 originals, next to the all-source town medians.
 
     python tools/map_survey_one.py mod/data/maps/CLCOURT.MAP [more maps...]

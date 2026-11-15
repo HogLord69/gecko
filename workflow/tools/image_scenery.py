@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 image_scenery.py - turn a picture of an object on a white background (a
-render or a photo) into a new FOC scenery piece shaded like Fallout 2's own
+render or a photo) into a new mod scenery piece shaded like Fallout 2's own
 pre-rendered art, with its own art and proto, and optionally a ground shadow
 object like the Pep Gas sign's (GASSIGN2.FRM).
 
