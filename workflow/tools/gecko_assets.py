@@ -1057,14 +1057,14 @@ def cmd_apply(args) -> int:
     closes itself, or FAILED and waits. The worker does not depend on this window, so closing
     it early stops nothing (an Apply cut off half way through repack_art.py, 2026-11-12, left
     the registry swapped and a stamp unrewritten)."""
-    set_title("FOC: Apply New Art - closing this window does not stop it")
+    set_title("Apply New Art - closing this window does not stop it")
     status = read_status()
     if status.get("state") == "running" and status.get("pid") and process_alive(status["pid"]):
         print("An Apply New Art is already running; showing it.")
         return follow(args)
 
     say = Tee(APPLY_LOG)
-    say("FOC: Apply New Art")
+    say("Apply New Art")
     say("=" * 44)
     pending = read_pending()
     if pending:
@@ -1084,8 +1084,8 @@ def cmd_apply(args) -> int:
     ask = not args.dry_run
     blocked = None
     if BROWSE_MARKER.exists():
-        blocked = ("gecko is set up for another game (tools/gecko_browse). Close that gecko so the FOC settings "
-                   "come back, then use Apply New Art from the FOC gecko.")
+        blocked = ("gecko is set up for another game (tools/gecko_browse). Close that gecko so your mod's settings "
+                   "come back, then use Apply New Art from the gecko for your mod.")
     elif not wait_until(lambda: geckos_running() == 0, say, "Another gecko window is still open.", ask):
         blocked = "A deploy never runs while gecko is open."
     elif not wait_until(lambda: not games_running(), say, f"The game is running ({', '.join(games_running())}).", ask):

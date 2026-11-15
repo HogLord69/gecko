@@ -116,9 +116,10 @@ void SettingsDialog::setupModToolsTab() {
     auto* intro = new QLabel(
         "The Tools menu (Add Scenery from Picture, Apply New Art, and the copy and name entries on the "
         "map's right-click menu) runs your mod's own tools: tools/gecko_assets.py in the mod folder, "
-        "with Python. Left empty, gecko uses the nearest folder above gecko.exe that has them.\n\n"
+        "with Python. Left empty, gecko uses the map workflow folder beside gecko.exe, or else the nearest "
+        "folder above gecko.exe that has them.\n\n"
         "This is not a data path: the mod folder is your project, not game data. Data paths stay on the "
-        "General tab (for FOC: base\\mods\\foc, the deployed mod).");
+        "General tab (with the map workflow: base\\mods\\foc inside it, the deployed mod).");
     intro->setWordWrap(true);
     layout->addWidget(intro);
 

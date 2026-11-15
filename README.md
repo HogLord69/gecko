@@ -46,7 +46,35 @@ The **Tools** menu makes new art for your mod with the [map workflow](#the-map-w
 
 ### Apply New Art
 
-**Tools > Apply New Art** saves the map, closes gecko, deploys the mod in a window that numbers the steps, says FINISHED and closes itself, and opens gecko again on the map. The steps run on their own, so closing the window early stops nothing.
+**Tools > Apply New Art** saves the map, closes gecko, deploys the mod in a window that numbers the steps, says FINISHED and closes itself, and opens gecko again on the map. The steps run on their own, so closing the window early stops nothing. The window, with each step's own output left out:
+
+```
+Apply New Art
+============================================
+Waiting to go in:
+  0x020009C4  sdaygl19  from Fallout: Sonora (0x02000944)
+
+Waiting for gecko (process 12345) to close...
+
+--- Step 1 of 6: gen_ids.py
+
+--- Step 2 of 6: deploy.py
+
+--- Step 3 of 6: scenery_text.py --no-deploy
+
+--- Step 4 of 6: deploy.py
+
+--- Step 5 of 6: repack_art.py   (the slow one: it reads every map, about a minute)
+
+--- Step 6 of 6: validate.py
+
+============================================
+  FINISHED
+  The new pieces are in the palette (Scenery tab, or search for their names).
+============================================
+
+This window closes in 5 seconds.
+```
 
 ### First-run setup that finds your game
 
@@ -60,12 +88,29 @@ A Fallout 2 folder named only in the **Game Location** (the Play button's fields
 
 Point it at a Fallout 1 install and open its maps: Fallout 1's archives (`MASTER.DAT`, `CRITTER.DAT`, with their LZSS packing) and its version-19 maps, ladders included, are read and saved. Above, Junktown's entrance drawn by `gecko-cli map render`.
 
-### Editing
+### Copy, cut and paste
 
-- **Copy, cut and paste of map areas** (Ctrl+C / Ctrl+X / Ctrl+V): floor and roof tiles and objects, onto another elevation or into another map. A ghost follows the cursor and each click drops a copy.
-- **Right-click menu** on the map: Cut / Copy / Paste, the draw order (Bring to Front, Bring Forward, Send Backward, Send to Back; also Home / PgUp / PgDn / End) and **Put on Top**, which makes a piece on a table or shelf show on top of it in the game the way it does in the editor.
-- **Black Edge** and **Add / Remove Blocker** tools.
-- Each object is drawn at its own pixel offset, as the game draws it.
+![A copied part of Arroyo's village following the cursor, ready to drop](docs/hoglord/copy-paste.png)
+
+**Ctrl+C / Ctrl+X / Ctrl+V** copy, cut and paste map areas: floor and roof tiles and objects, onto another elevation or into another map. A ghost follows the cursor and each click drops a copy, until right-click or Esc.
+
+### Right-click menu
+
+![The map's right-click menu in Arroyo's village: Cut, Copy, the draw order, Put on Top and the copy entries](docs/hoglord/right-click-menu.png)
+
+Right-click on the map for Cut / Copy / Paste and the draw order (Bring to Front, Bring Forward, Send Backward, Send to Back; also Home / PgUp / PgDn / End). **Put on Top** makes a piece on a table or shelf show on top of it in the game the way it does in the editor. With the map workflow's tools there are also **Mirrored Copy**, **Bigger or Smaller Copy** and **Name and Examine Text**.
+
+### Black Edge
+
+![The Black Edge tool laying a black edge across Arroyo](docs/hoglord/black-edge.png)
+
+The **Black Edge** tool lays Fallout 2's black map edge: click to start and at each corner, Space puts the black on the other side, and the last point, Enter or right-click finishes it.
+
+### Add and Remove Blocker
+
+![Wall blockers shown in green, with a row just dragged across the village](docs/hoglord/blockers.png)
+
+**Add / Remove Blocker** place or remove wall blockers and scroll blockers: click a hex for one, or drag to stamp a path. Each object is also drawn at its own pixel offset, as the game draws it.
 
 ### Smaller changes
 
