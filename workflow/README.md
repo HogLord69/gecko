@@ -80,8 +80,8 @@ that you drop into your own map in gecko with **Edit → Stamp Pattern**.
 
 * **Ready-made:** [`resources/stamps`](../resources/stamps) (`stamps` in the zip) has
   1,567 stamps cut from Fallout 1, Fallout 2 and four total conversions, a folder per
-  game laid out the same way (buildings by what they're built from and by size,
-  graveyards, junkyards, ruins by size), plus 21 props of my own (`HogLord Props`).
+  game laid out the same way (buildings by what they're built from, graveyards,
+  junkyards, ruins), plus 21 props of my own (`HogLord Props`).
   gecko lists them in Edit → Stamp Pattern as "Came with gecko". `Fallout 2` and
   `HogLord Props` stamp as they are; another game's stamp is converted into your mod's
   ids when you pick it, once that game is set up here (`python setup.py`).

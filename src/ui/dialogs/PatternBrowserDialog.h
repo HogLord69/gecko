@@ -70,7 +70,7 @@ private:
     resource::GameResources& _resources;
     std::unique_ptr<HexagonGrid> _hexgrid;
     QFileSystemModel* _folderModel = nullptr;
-    QSortFilterProxyModel* _folderOrder = nullptr; ///< the library's own order (see LibraryOrder)
+    QSortFilterProxyModel* _folderOrder = nullptr; ///< numbers sorted as numbers (see LibraryOrder)
     QTreeView* _folderTree = nullptr;
     QFileSystemModel* _bundledModel = nullptr; ///< null when gecko came with no stamps
     QSortFilterProxyModel* _bundledOrder = nullptr;

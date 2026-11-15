@@ -42,7 +42,7 @@ std::filesystem::path makeGame(const std::filesystem::path& root) {
 }
 
 
-// The Pattern Library's trees show their folder model through a sort layer (sizes smallest first):
+// The Pattern Library's trees show their folder model through a sort layer (numbers as numbers):
 // the index of a folder, and the folder of an index, go through it.
 QModelIndex folderIndex(QTreeView* tree, const QString& path) {
     auto* order = qobject_cast<QSortFilterProxyModel*>(tree->model());
@@ -227,7 +227,7 @@ TEST_CASE("The Pattern Library lists the stamps that came with gecko under the u
 
 TEST_CASE("The Pattern Library draws another game's stamps with its data and says it converts them", "[qt][othergames]") {
     const QString bundled = geck::pattern::PatternLibrary::bundledDir();
-    if (bundled.isEmpty() || !QDir(bundled).exists("Sonora/Buildings/Adobe/Medium")) {
+    if (bundled.isEmpty() || !QDir(bundled).exists("Sonora/Buildings/Adobe")) {
         SKIP("no stamps beside this test program");
     }
     geck::resource::GameResources own;
@@ -259,7 +259,7 @@ TEST_CASE("The Pattern Library draws another game's stamps with its data and say
         return QString();
     };
 
-    revealFolder(tree, bundled, "Sonora/Buildings/Adobe/Medium");
+    revealFolder(tree, bundled, "Sonora/Buildings/Adobe");
     CHECK(asked == QStringList{ "sonora" });
     CHECK(note().contains("Fallout: Sonora"));
     CHECK(note().contains("Custom > From Fallout Sonora")); // the folder stamp-convert writes
@@ -273,7 +273,7 @@ TEST_CASE("The Pattern Library draws another game's stamps with its data and say
     CHECK(asked == QStringList{ "sonora" }); // a game that isn't set up is never loaded
     CHECK(note().contains("left out here"));
 
-    revealFolder(tree, bundled, "Fallout 2/Buildings/Adobe/Medium");
+    revealFolder(tree, bundled, "Fallout 2/Buildings/Adobe");
     CHECK(note().isEmpty()); // the map's own numbers: nothing to convert
     REQUIRE(grid->count() > 0);
     Q_EMIT grid->itemActivated(grid->item(0));

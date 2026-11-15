@@ -19,15 +19,15 @@ A stamp stores its game's proto and art ids, not images: stamped into another ga
 The same for every game; a folder with no stamps for a game is left out:
 
 ```
-<Game>/Buildings/<construction>/<Small|Medium|Large|Huge>/<place> #<n>.json
+<Game>/Buildings/<construction>/<place> #<n>.json
 <Game>/Graveyards/<place> #<n>.json
 <Game>/Junkyards/<place> #<n>.json
-<Game>/Ruins/<Small|Medium|Large>/<place> #<n>.json
+<Game>/Ruins/<place> #<n>.json
 ```
 
 `<place>` is the map's name in its game's own map list (`maps.txt`), so "Arroyo Village #2" is the second stamp cut from Arroyo's village map. Fallout 1 has no such list, so its stamps are named after the map file ("HUBDWNTN #1"). Each game's `INDEX.md` lists every stamp with the map it came from and its size.
 
-**Buildings** are sorted by what they are built from: Adobe, Brick & Concrete, Caves & Rock, Corrugated Metal, Military & Metal, Stone & Plaster, Tents, Vault, and Wood & Scrap. The folder is decided by the wall art the building really uses, and every building was checked by eye. Then by size, in roofed squares: Small under 60, Medium under 150, Large under 400, Huge. A building comes with its walls, doors, floor and roof tiles, furniture and containers. It is kept only if its walls go all the way round its roof, with gaps no longer than a doorway, and its roof still covers the ground inside its walls. A stamp named with a 2nd or 3rd floor is a building from that elevation of its map: stamp it on that elevation. It may be an upper storey or an area of its own; a map's buildings are numbered straight through its elevations, so it is not tied to one 1st floor stamp.
+**Buildings** are sorted by what they are built from: Adobe, Brick & Concrete, Caves & Rock, Corrugated Metal, Military & Metal, Stone & Plaster, Tents, Vault, and Wood & Scrap. The folder is decided by the wall art the building really uses, and every building was checked by eye. A building comes with its walls, doors, floor and roof tiles, furniture and containers. It is kept only if its walls go all the way round its roof, with gaps no longer than a doorway, and its roof still covers the ground inside its walls. A stamp named with a 2nd or 3rd floor is a building from that elevation of its map: stamp it on that elevation. It may be an upper storey or an area of its own; a map's buildings are numbered straight through its elevations, so it is not tied to one 1st floor stamp.
 
 **Graveyards** are clusters of graves, headstones, crosses and coffins, with the fence round them when there is one, and the gates, posts, benches and dead trees inside it.
 
@@ -37,7 +37,7 @@ The same for every game; a folder with no stamps for a game is left out:
 
 Graveyards, junkyards and ruins are objects only, with no ground tiles, so they drop onto whatever ground the map already has. Identical stamps that recur across maps appear once. Hidden script markers and "UNUSED ART" placeholder pieces are left out.
 
-Ruins are sized by the hexes their pieces stand on: Small under 30, Medium under 50, Large.
+Each game's `INDEX.md` gives every stamp's size: buildings by roofed squares (Small under 60, Medium under 150, Large under 400, Huge), ruins by the hexes their pieces stand on (Small under 30, Medium under 50, Large).
 
 Every stamp carries a `credit` line, a `source` block with its game, map and elevation, and a `library` block with where it belongs in this layout. Gecko ignores all three. The layout is made by `organize_stamps.py`, which can be run again after stamps are added.
 

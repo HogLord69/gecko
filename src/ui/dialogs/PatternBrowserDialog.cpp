@@ -32,20 +32,8 @@ namespace {
     constexpr int THUMBNAIL_SIZE = 96;
     constexpr int PATH_ROLE = Qt::UserRole + 1;
 
-    /// The stamp library's order: size folders smallest first (Small, Medium, Large, Huge, as
-    /// tools/organize_stamps.py names them), everything else by name with numbers read as numbers
-    /// ("#3" before "#13").
-    int sizeRank(const QString& name) {
-        static const QStringList sizes{ "Small", "Medium", "Large", "Huge" };
-        return static_cast<int>(sizes.indexOf(name));
-    }
-
+    /// The stamp library's order: by name, with numbers read as numbers ("#3" before "#13").
     bool libraryLess(const QString& left, const QString& right) {
-        const int l = sizeRank(left);
-        const int r = sizeRank(right);
-        if (l >= 0 && r >= 0) {
-            return l < r;
-        }
         static const QCollator collator = [] {
             QCollator c;
             c.setNumericMode(true);

@@ -129,7 +129,7 @@ void saveImage(const QImage& image, const QString& name) {
 }
 
 
-// The Pattern Library's trees show their folder model through a sort layer (sizes smallest first):
+// The Pattern Library's trees show their folder model through a sort layer (numbers as numbers):
 // the index of a folder, and the folder of an index, go through it.
 QModelIndex folderIndex(QTreeView* tree, const QString& path) {
     auto* order = qobject_cast<QSortFilterProxyModel*>(tree->model());
@@ -225,7 +225,7 @@ TEST_CASE("README pictures", "[.readme]") {
         dialog.resize(980, 600);
         auto* tree = dialog.findChild<QTreeView*>("bundledStampsTree");
         REQUIRE(tree != nullptr);
-        const QString pick = env("GECKO_SHOTS_STAMP_FOLDER").isEmpty() ? QString("Fallout 2/Buildings/Adobe/Medium")
+        const QString pick = env("GECKO_SHOTS_STAMP_FOLDER").isEmpty() ? QString("Fallout 2/Buildings/Adobe")
                                                                        : env("GECKO_SHOTS_STAMP_FOLDER");
         dialog.show();
         wait(1500);
@@ -263,7 +263,7 @@ TEST_CASE("README pictures", "[.readme]") {
         const QString bundled = geck::pattern::PatternLibrary::bundledDir();
         dialog.show();
         wait(1500);
-        revealFolder(tree, bundled, "Sonora/Buildings/Brick & Concrete/Medium");
+        revealFolder(tree, bundled, "Sonora/Buildings/Brick & Concrete");
         save(dialog, "stamps-other-game.png");
     }
 
