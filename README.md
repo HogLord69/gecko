@@ -1,204 +1,87 @@
-# Gecko - Fallout 2 map editor
+# HogLord Build of Gecko
 
-[![CI](https://github.com/JanSimek/geck-map-editor/actions/workflows/ci.yml/badge.svg)](https://github.com/JanSimek/geck-map-editor/actions/workflows/ci.yml) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/50b6611a3e2246c6b07282f87aa5940a)](https://www.codacy.com/gh/JanSimek/geck-map-editor/dashboard?utm_source=github.com&utm_medium=referral&utm_content=JanSimek/geck-map-editor&utm_campaign=Badge_Grade)
+![The welcome screen: Vault Boy with a hog's head, giving a thumbs up](docs/hoglord/welcome.png)
 
-*Gecko* is a modern cross-platform Fallout 2 map editor.
+My build of [gecko](https://github.com/JanSimek/gecko), Jan Simek's Fallout 2 map editor, with the tools I use to make maps for my Fallout 2 mod. This page covers only what this build adds. For the editor itself (its controls, its tools, how it is built) see [gecko's own README](https://github.com/JanSimek/gecko#readme).
 
-![Screenshot](https://github.com/JanSimek/geck-map-editor/blob/master/screenshot.jpg "Screenshot")
+It keeps gecko's own files and folders: the program is still `gecko.exe`, and its settings and stamps live where gecko keeps them (`%LOCALAPPDATA%\gecko\gecko`).
 
-## This fork (HogLord69)
+## Download
 
-> **Making maps?** [`workflow/`](workflow/README.md) holds the whole toolkit I use to make
-> Fallout 2 maps with gecko: browsing other games and borrowing their buildings as stamps,
-> planning a site, building and finishing a map, and putting it in the game. Install
-> Python and gecko, open a terminal in `workflow`, run `python setup.py`, then
-> `python foc.py`. No game files are included; it works from your own installs.
+Windows builds are on the [releases page](https://github.com/HogLord69/gecko/releases). Unzip anywhere and run `gecko.exe`. On first launch Preferences opens: press **Add Path...**, then **Add Folder...**, and choose your Fallout 2 folder (the one with `master.dat` in it). No game data is included, so you need your own copy of the game.
 
-On top of upstream gecko, this fork adds:
+List one game at a time. Each game numbers its art and objects in its own lists, so with two games listed the top one's lists win and the other's maps show the wrong pieces. To use another game's pieces, see the next section.
 
-- **Fallout 1 support.** Point gecko at a Fallout 1 install and open its maps: the DAT1 archives (`MASTER.DAT`, `CRITTER.DAT`, with their LZSS packing) and version-19 maps, including their one-word ladders, are read and saved.
-- **Nested inventories** (a bag inside a critter's pack) load instead of failing the map.
-- **Stamps** in [`resources/stamps`](resources/stamps): buildings, graveyards, junkyards and ruins cut from Fallout 1, Fallout 2, Sonora, Nevada, Resurrection and Olympus, with credits.
-- **Copy, cut and paste of map areas** (Ctrl+C / Ctrl+X / Ctrl+V): tiles and objects, onto another elevation or into another map. Paste shows a ghost; each click drops a copy.
-- **Right-click menu**: Cut / Copy / Paste and the draw order (Bring to Front, Forward, Backward, Send to Back; also Home / PgUp / PgDn / End).
-- A **Tools menu for a mod's own art**, for a mod folder that has `tools/gecko_assets.py`: gecko finds the nearest such folder above `gecko.exe`, or takes the one named in File > Preferences > Mod Tools. That folder is the mod's project, not a data path, and gecko refuses it as one. *Add Scenery from Picture* turns a render or photo into a new scenery piece, previewed beside the player for scale. *Cut Building into Walls* cuts a building render into wall pieces, one per hex the way the original walls are cut, and its roof (above a wall height you Shift-click) into roof tiles, and writes a stamp that lays them all down. The map's right-click menu makes mirrored and resized copies and edits an object's name and examine text. *Apply New Art* saves the map, closes gecko, deploys the mod in a console window and opens gecko again on the map.
-- A **Black Edge** tool and a **custom stamps folder**.
-- Add/Remove Blocker tools, `gecko-cli map strip-exit-grids`, no crash on missing art, single instance, sturdier settings.
-- **Other games in the object palette** (with a mod's tools). The palette's Game list shows the pieces of the other games your mod's `tools/sources.json` names, each read from your own install and kept apart from your game's data. Drop one on the map and it is brought into your mod first, with new numbers (`gecko_assets.py port`), so it shows at once and works in your game; Tools > Apply New Art deploys it. Scenery, walls, misc pieces and items with no inventory picture come across; critters, weapons, armor, ammo and drugs are refused, because their other numbers would point at the wrong things.
-- **First-run setup.** A Fallout 2 folder named only in the Game Location (the Play button's fields, right under the data paths) is read as the game's data too. Auto-Detect finds Fallout 2 in every Steam library, on any drive, and reads both the 64-bit and 32-bit registry keys that GOG and Steam write. With no game listed, gecko says which button to press instead of asking for a command-line argument.
+## What this build adds
 
-Windows builds are on the [releases page](https://github.com/HogLord69/gecko/releases). On first launch, Preferences opens: press **Add Path...**, then **Add Folder...**, and choose your Fallout 2 folder (the one with `master.dat` in it).
+### Pieces from other games
 
-## Building from source
+![The object palette showing Fallout: Sonora's scenery that Fallout 2 doesn't have](docs/hoglord/game-list.png)
 
-Some dependencies are bundled as git submodules, so clone with `--recursive` — or, if you already cloned, fetch them with `git submodule update --init --recursive`.
+The object palette has a **Game** list. Pick another game you have installed and the palette shows its pieces, read from your own install and kept apart from your game's data. **Only pieces Fallout 2 doesn't have** (on at first) leaves out the Fallout 2 pieces every total conversion carries, judged by the picture: of Fallout: Sonora's 2,377 scenery pieces it shows the 1,675 that are its own.
 
-**Important**: build in Release for performance — Debug builds are significantly slower at loading maps.
+Drop one on the map and it is brought into your mod first, with new numbers, so it works in your game and shows at once; **Tools > Apply New Art** puts it in the game. Dropping it again uses the same copy. Scenery, walls, misc pieces and items that have no inventory picture (desks, lockers, chests, keys) come across. Critters, weapons, armor, ammo and drugs are refused with the reason: their other numbers (AI packet, talking head, ammo, inventory picture) would point at the wrong things. A piece's script stays behind, since its number means another script in your game.
 
-### Dependencies
+This needs a mod folder with the mod tools (`tools/gecko_assets.py`, and `tools/sources.json` naming the games and where they are installed), set in **File > Preferences > Mod Tools**.
 
-- **Qt6** (Core, Widgets, Svg) — primary UI framework
-- **SFML 3** — 2D graphics rendering
-- **spdlog** — logging framework
-- **ZLIB** — compression support
-- **vfspp** — virtual file system for game archives (bundled as a git submodule)
+### Stamps that come with it
 
-`SFML`, `spdlog` and `ZLIB` are used from your system when a compatible version is
-found, and otherwise downloaded and built automatically by CMake. Qt6 must be installed.
+![The Pattern Library with "Came with gecko": Fallout 2's adobe buildings](docs/hoglord/pattern-library.png)
 
-### Linux
+**Edit > Stamp Pattern** lists the stamps that come with this build under your own, as **Came with gecko**: 1,567 buildings, graveyards, junkyards and ruins cut from Fallout 1, Fallout 2, Sonora, Nevada, Resurrection and Olympus, sorted by what they are built from, and **HogLord Props**, 21 props of my own. Nothing has to be copied anywhere. A stamp holds its game's object numbers, not pictures, so use each folder with the game it is named for. The credits are in [`resources/stamps/README.md`](resources/stamps/README.md).
 
-```bash
-# Build tools and dependencies (Ubuntu/Debian)
-sudo apt install cmake g++ git \
-                 qt6-base-dev qt6-base-dev-tools qt6-svg-dev \
-                 libspdlog-dev zlib1g-dev
+### New scenery from a picture
 
-# Enter the cloned git repo folder
-cd geck-map-editor
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-```
+![Add Scenery from Picture: a film projector render, previewed beside the player on the hex grid](docs/hoglord/add-scenery.png)
 
-> **SFML 3 is required.** If your distribution does not package it yet (current
-> Debian/Ubuntu ship SFML 2), CMake downloads and builds SFML automatically. That
-> source build additionally needs the X11/OpenGL/FreeType headers:
->
-> ```bash
-> sudo apt install libgl1-mesa-dev libxrandr-dev libxcursor-dev libxi-dev libudev-dev libfreetype6-dev
-> ```
+**Tools > Add Scenery from Picture** turns a render or photo into a new scenery piece: cut out, shaded like Fallout 2's pre-rendered art and put in the game's palette, with its own art, proto, name and examine text. The preview stands it on the hex grid beside the player, for scale; a click on the picture picks the point it stands on. On the map's right-click menu, **Mirrored Copy**, **Bigger or Smaller Copy** and **Name and Examine Text** work on the one selected piece.
 
-### Windows
+### Buildings cut into walls
 
-The easiest way to build Gecko on Windows is to use [vcpkg](https://vcpkg.io/) for dependency management and the latest Visual Studio for compilation.
+![Cut Building into Walls: a house render with the foot of its walls marked, and where it is cut](docs/hoglord/cut-building.png)
 
-```bash
-vcpkg.exe integrate install
-vcpkg.exe install --triplet x64-windows sfml qt6
-```
+**Tools > Cut Building into Walls** cuts a building rendered with the Fallout camera into wall pieces, one per hex, on the same screen columns as Fallout 2's own walls (32 and 16 pixels on a 14 degree wall, 16 on a 37 degree one). Click the foot of the walls; Shift-click the top of a wall, and the roof above it becomes roof tiles. A stamp lays the whole building down.
 
-Now just open the project in Visual Studio (File > Open > CMake...) and then build it (Build > Build All).
+### Apply New Art
 
-### macOS
+**Tools > Apply New Art** saves the map, closes gecko, deploys the mod in a window that numbers the steps, says FINISHED and closes itself, and opens gecko again on the map. The steps run on their own, so closing the window early stops nothing.
 
-Install dependencies using Homebrew:
+### First-run setup that finds your game
 
-```bash
-brew install sfml qt6 spdlog
+![Preferences on first run, saying which buttons to press](docs/hoglord/first-run.png)
 
-# Point CMake at the Homebrew Qt6 installation
-export CMAKE_PREFIX_PATH="/opt/homebrew/opt/qt6:$CMAKE_PREFIX_PATH"
+A Fallout 2 folder named only in the **Game Location** (the Play button's fields, under the data paths) is read as the game's data too. **Auto-Detect** finds Fallout 2 in every Steam library on any drive (`D:\SteamLibrary`) and reads the registry keys GOG and Steam write from their 32-bit installers. While no game is listed, Preferences says which buttons to press.
 
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-```
+### Fallout 1 maps
 
-## Usage
+![Fallout 1's Junktown entrance, drawn by this build from the game's own archives](docs/hoglord/fallout1-junktown.png)
 
-### Setup
+Point it at a Fallout 1 install and open its maps: Fallout 1's archives (`MASTER.DAT`, `CRITTER.DAT`, with their LZSS packing) and its version-19 maps, ladders included, are read and saved. Above, Junktown's entrance drawn by `gecko-cli map render`.
 
-1. Copy `master.dat` and `critter.dat` from your Fallout 2 installation to the `resources` subdirectory (`gecko.app/Contents/Resources` on Mac)
-2. (Optional) Extract data files using [dat-unpacker](https://github.com/falltergeist/dat-unpacker) with the `--transform` option to convert filenames to lowercase
+### Editing
 
-### Controls
+- **Copy, cut and paste of map areas** (Ctrl+C / Ctrl+X / Ctrl+V): floor and roof tiles and objects, onto another elevation or into another map. A ghost follows the cursor and each click drops a copy.
+- **Right-click menu** on the map: Cut / Copy / Paste, the draw order (Bring to Front, Bring Forward, Send Backward, Send to Back; also Home / PgUp / PgDn / End) and **Put on Top**, which makes a piece on a table or shelf show on top of it in the game the way it does in the editor.
+- **Black Edge** and **Add / Remove Blocker** tools.
+- Each object is drawn at its own pixel offset, as the game draws it.
 
-> **Shift is modal.** It means three different things depending on what you are doing: hold
-> **Shift** while placing a tile to paint on the **roof**, while clicking with tiles already
-> selected to **range-select**, and while drawing an exit-grid edge to **snap to a clean angle**.
+### Smaller changes
 
-#### Navigation
-- **Right-click + drag**: Pan the view
-- **Mouse wheel**: Zoom in / out
-- **Window resize**: View adjusts automatically
+- New items hold what the game gives them: an ammo box has its rounds, a weapon its ammo, and a container is saved with room for its items. Ammo amounts are entered in rounds, as they are shown.
+- A bag inside a critter's inventory loads instead of failing the map; an object whose art can't be found is skipped instead of stopping the map.
+- The file browser's **Only the mod's own files** switch hides what the .dat archives provide, so the list is your mod's maps.
+- A data path that can't be loaded is reported and skipped instead of closing gecko.
+- `gecko-cli map strip-exit-grids --map maps\arvillag.map --out out.map --data "C:\Games\Fallout 2\master.dat"`.
+- Only one copy runs at a time, and the settings are sturdier.
 
-#### Selection & modes
-The active mode is chosen from the toolbar; the status bar shows the keys that act in the current mode.
+## The map workflow
 
-- **Left-click**: Select the element under the cursor. Clicking the same spot again **cycles** through overlapping elements (roof tile → object → floor tile).
-- **Right-click**: Cancel the active tool / placement mode (when no tool is active, right-click + drag pans).
-- **Esc**: Clear the selection (or exit the active placement / stamp tool).
-- The **Selection** toolbar dropdown picks which layers participate: combine **Floor Tiles**, **Roof Tiles**, and **Objects** (all on = classic "All"), or switch to an exclusive tool (**Roof Tiles**, **Hexes**, **Scroll Blocker Rectangle**).
+[`workflow/`](workflow/README.md) holds the whole toolkit I use to make Fallout 2 maps with this build: browsing the original games and the total conversions and saving their buildings as stamps, converted to your mod's numbers; planning a site to scale; building and finishing a map the way Fallout 2 does; putting it in the game. It needs Python 3.10 or newer and Fallout 2 with the Restoration Project Unofficial: open a terminal in `workflow`, run `python setup.py`, then `python foc.py`.
 
-#### Multi-selection
-- **Click + drag**: Area select (replaces the current selection).
-- **Alt+Click** / **Alt+Drag** (Option on macOS): Add the item / covered area to the selection.
-- **Ctrl+Click** / **Ctrl+Drag**: Remove from the selection (deselect only — never adds; items on hidden layers are left untouched).
-- **Shift+Click**: Range-select tiles — selects the rectangle between the first selected tile and the clicked tile.
-- **Ctrl+A**: Select all items of the current selection mode.
-- **Ctrl+D**: Deselect everything.
+## Building
 
-#### Object manipulation
-- **R**: Rotate the selected object(s) — works on single or multiple selections.
-- **Delete** / **Backspace**: Remove the selected object(s).
-
-#### Placement tools
-- **Eyedropper — pick under cursor** (**P**): hover over the map and press **P** to sample the topmost thing under the cursor. A **tile** is loaded into the tile palette and tile painting is armed. An **object** raises the object palette and enters placement mode with a ghost that follows the cursor — **left-click** to drop a copy (keeps placing), **R** to rotate the ghost's facing, **Esc** or **right-click** to stop.
-- **Tile placement** (pick a tile in the palette): **Left-click** or **drag** to paint, hold **Shift** to paint on the **roof**, **Esc** or **right-click** to exit.
-- **Stamp / pattern** (Edit → Stamp Pattern): **Left-click** to place, **R** to cycle the prefab's orientation variant, **Esc** or **right-click** to cancel.
-- **Set player position** (Map Info panel): **Left-click** to set the player start hex, **Esc** to cancel.
-- **Exit grid — single hex** (Exit Grids tool → *Place single hex*): **Left-click** to drop one marker, **Esc** or **right-click** to exit.
-- **Exit grid — Draw edge** (Exit Grids tool → *Draw edge*): **Left-click** to add a line vertex, **Space** to flip which side the bars sit on, hold **Shift** to snap the live segment to a clean exit-grid angle, **Enter** or **double-click** to finish the edge, **Esc** or **right-click** to cancel.
-- **Scroll Blocker Rectangle** (**B**): Drag a rectangle to place scroll blockers along its border.
-
-#### View / layers
-- **Ctrl+E**: Toggle the "Show Exit Grids" overlay.
-- **F5**: Save and play the current map in Fallout 2.
-- The **View** menu (and matching toolbar buttons) toggle Objects, Critters, Walls, Roofs, Scroll Blockers, Wall Blockers, Hex Grid, and Light Overlays (no default keys).
-
-#### File
-- **Ctrl+N**: New map
-- **Ctrl+O**: Open map
-- **Ctrl+B**: Browse maps as thumbnails
-- **Ctrl+S**: Save map
-- **Ctrl+Shift+S**: Save map as…
-- **Ctrl+Z** / **Ctrl+Y**: Undo / Redo
-- **Ctrl+Q**: Quit
-
-## Development
-
-### Code Formatting
-```bash
-./format.sh  # Formats all .cpp and .h files with clang-format
-```
-
-### Testing
-```bash
-# Run every suite through CTest (from the build directory)
-ctest --output-on-failure
-
-# …or run a suite directly
-./general_tests       # formats, readers/writers, editor logic
-./performance_tests   # reader benchmarks
-./qt_tests            # Qt UI regressions
-```
-
-### Architecture Notes
-- Uses Qt6 for UI framework and SFML for 2D game rendering
-- Follows modern C++20 best practices with RAII and smart pointers
-- VFS integration allows reading from both loose files and DAT archives
-- All file paths use `std::filesystem::path` for cross-platform compatibility
-
-## Compatibility
-
-The goal is to be compatible with vanilla Fallout 2, including loading maps created with the original Mapper.
-
-## Contributing
-
-Contributions are welcome! Please ensure your code follows the project's coding standards and includes appropriate tests.
+It builds exactly as gecko does: see [gecko's README](https://github.com/JanSimek/gecko#building-from-source). The pictures on this page are drawn by `qt_tests "[.readme]"` (see `tests/qt/test_readme_shots.cpp`).
 
 ## Credits
 
-This project wouldn't be possible without the excellent work from:
-- [Fallout2-ce](https://github.com/fallout2-ce/fallout2-ce) - Fallout 2 Community Edition engine recreation, the reference for engine data and file formats (originally created by [@alexbatalov](https://github.com/alexbatalov))
-- [Falltergeist](https://github.com/falltergeist/falltergeist/) - Fallout engine reimplementation
-- [Klamath](https://github.com/adamkewley/klamath) - Fallout file format library
-- [FRM-Viewer](https://github.com/Primagen/Fallout-FRM-Viewer) - Fallout graphics format viewer
-- [Dims Mapper](https://github.com/FakelsHub/F2_Mapper_Dims) - Legacy Fallout 2 map editor
-- [darkfo](https://github.com/darkf/darkfo) - Web-based Fallout engine
-- [Tabler icons](https://tabler-icons.io/)
-
-## Useful Links
-
-- [Complete Fallout 1 & 2 Artwork Collection](https://www.nma-fallout.com/threads/the-complete-fallout-1-2-artwork.191548/)
-- [Fallout File Format Documentation](https://falloutmods.fandom.com/wiki/Category:Fallout_and_Fallout_2_file_formats)
-- [Modding guide by Femic et al.](https://f3mic.github.io/)
+gecko is Jan Simek's, under the Apache 2.0 licence ([LICENSE](LICENSE)); this build's changes are under the same licence. Fallout is a trademark of Bethesda Softworks LLC. The stamps carry the credits of the games they were cut from.

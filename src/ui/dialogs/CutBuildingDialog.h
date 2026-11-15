@@ -41,6 +41,8 @@ class CutBuildingDialog : public QDialog {
 
 public:
     explicit CutBuildingDialog(ModToolsRunner* runner, QWidget* parent = nullptr);
+    /// Open a picture as Choose... does, without the file dialog (the README shots use it).
+    void loadPicture(const QString& path);
 
     [[nodiscard]] int buildingsMade() const { return _buildingsMade; }
 
@@ -50,7 +52,6 @@ protected:
 private:
     void setupUI();
     void choosePicture();
-    void loadPicture(const QString& path);
     void addPoint(const QPoint& labelPos);
     void removeLastPoint();
     void setWallTopFrom(const QPoint& labelPos);
