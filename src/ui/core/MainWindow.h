@@ -90,6 +90,12 @@ public:
 
     // Access to palette panels for drag and drop and tile deselection
     ObjectPalettePanel* getObjectPalettePanel() const { return _objectPalettePanel; }
+
+    /// Bring a piece of another game (the object palette's Game list) into the mod with the mod
+    /// tools, and make it readable here at once: the overlay they write (the lists and files a
+    /// deploy would add) is mounted on top of the data for this session. Its PID in the mod, or
+    /// nothing after saying why not.
+    std::optional<uint32_t> bringInFromOtherGame(const QString& source, uint32_t sourcePid);
     TilePalettePanel* getTilePalettePanel() const { return _tilePalettePanel; }
     FileBrowserPanel* getFileBrowserPanel() const { return _fileBrowserPanel; }
 
@@ -178,6 +184,8 @@ private slots:
     void makeMirroredCopy(ModToolsRunner& runner, quint32 pid);
     void makeResizedCopy(ModToolsRunner& runner, quint32 pid);
     void editNameAndText(ModToolsRunner& runner, quint32 pid);
+    /// Give the object palette the other games the mod tools list (gecko_assets.py sources/source).
+    void connectOtherGames();
     void onPlayGame();
     void showSavePatternDialog();
     void showStampPatternDialog();

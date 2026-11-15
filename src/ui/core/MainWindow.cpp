@@ -88,6 +88,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QInputDialog>
+#include <algorithm>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLineEdit>
@@ -1933,6 +1934,8 @@ void MainWindow::connectPanelSignals() {
     // Panel signals to lambdas that resolve _currentEditorWidget at call time. Called from
     // setupDockWidgets() and rebuildResourcePanels(); panel recreation drops old connections.
 
+    connectOtherGames();
+
     // SelectionPanel signals → MainWindow / current editor widget
     if (_selectionPanel) {
         connect(_selectionPanel, &SelectionPanel::objectFrmChanged,
@@ -3109,6 +3112,101 @@ void MainWindow::editNameAndText(ModToolsRunner& runner, quint32 pid) {
         return;
     }
     showStatusMessage(QString("Saved the name and examine text for %1. %2").arg(pidText(pid), AFTER_APPLY));
+}
+
+void MainWindow::connectOtherGames() {
+    if (!_objectPalettePanel) {
+        return;
+    }
+    _objectPalettePanel->setOtherGameProviders(
+        [this](QString* note) {
+            QList<ObjectPalettePanel::OtherGame> games;
+            if (!modToolsConfigured()) {
+                *note = "Other games come from your mod's tools: set the mod folder in File > Preferences > Mod Tools";
+                return games;
+            }
+            ModToolsRunner runner(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()), _settings->getPythonExecutable());
+            const ModToolResult result = runner.runAndWait({ "sources" });
+            if (!result.ok) {
+                *note = "The mod tools didn't list the other games: " + result.error;
+                return games;
+            }
+            for (const auto& value : result.json.value("games").toArray()) {
+                const QJsonObject game = value.toObject();
+                games.push_back({ game.value("id").toString(), game.value("label").toString() });
+            }
+            if (games.isEmpty()) {
+                *note = "No other games are set up in the mod's tools/sources.json";
+            }
+            return games;
+        },
+        [this](const QString& id, QString* error) {
+            std::vector<std::filesystem::path> layers;
+            ModToolsRunner runner(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()), _settings->getPythonExecutable());
+            const ModToolResult result = runner.runAndWait({ "source", id });
+            if (!result.ok) {
+                *error = result.error;
+                return layers;
+            }
+            for (const auto& value : result.json.value("paths").toArray()) {
+                layers.emplace_back(value.toString().toStdU16String());
+            }
+            return layers;
+        });
+}
+
+std::optional<uint32_t> MainWindow::bringInFromOtherGame(const QString& source, uint32_t sourcePid) {
+    auto runner = makeModToolsRunner();
+    if (!runner) {
+        return std::nullopt;
+    }
+    showStatusMessage(QString("Bringing %1 into your mod...").arg(pidText(sourcePid)));
+    const ModToolResult result = runWithWaitCursor(*runner, { "port", source, pidText(sourcePid) });
+    if (!result.ok) {
+        clearStatusMessage();
+        QtDialogs::showWarning(this, "Bring In from Another Game", result.error);
+        return std::nullopt;
+    }
+    bool parsed = false;
+    const uint32_t pid = result.json.value("pid").toString().toUInt(&parsed, 0);
+    if (!parsed) {
+        QtDialogs::showWarning(this, "Bring In from Another Game", "The mod tools gave no PID for it.");
+        return std::nullopt;
+    }
+
+    // The overlay holds the lists a deploy would write and the new files. Mounted last it wins over
+    // the mod's deployed layer; the lists it replaces are read again from it.
+    const QString overlay = result.json.value("overlay").toString();
+    if (!overlay.isEmpty()) {
+        const std::filesystem::path overlayPath(overlay.toStdU16String());
+        auto& files = _resourcesShared->files();
+        const auto mounts = files.mounts();
+        const bool mounted = std::any_of(mounts.begin(), mounts.end(), [&overlayPath](const auto& mount) {
+            std::error_code ec;
+            return std::filesystem::equivalent(mount.sourcePath, overlayPath, ec);
+        });
+        if (mounted) {
+            files.refresh();
+        } else {
+            files.addDataPath(overlayPath);
+        }
+        for (const auto& value : result.json.value("changed").toArray()) {
+            _resourcesShared->repository().forget(value.toString().toStdString());
+        }
+    }
+
+    QString message = result.json.value("new").toBool()
+        ? QString("Brought %1 in from %2 as %3. Tools > Apply New Art puts it in the game.")
+              .arg(pidText(sourcePid), result.json.value("label").toString(), pidText(pid))
+        : QString("%1 from %2 is already in your mod as %3.")
+              .arg(pidText(sourcePid), result.json.value("label").toString(), pidText(pid));
+    const QJsonArray notes = result.json.value("notes").toArray();
+    for (const auto& note : notes) {
+        message += " " + note.toString();
+    }
+    showStatusMessage(message);
+    spdlog::info("{}", message.toStdString());
+    return pid;
 }
 
 void MainWindow::onPlayGame() {

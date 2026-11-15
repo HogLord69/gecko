@@ -4,10 +4,15 @@
 #include "ui/palette/PaletteModel.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/palette/PaletteView.h"
+#include <QComboBox>
+#include <QList>
 #include <QSortFilterProxyModel>
 #include <QTabWidget>
 #include <QDrag>
 #include <QMimeData>
+#include <filesystem>
+#include <functional>
+#include <map>
 #include <vector>
 #include <memory>
 #include <optional>
@@ -55,6 +60,11 @@ struct ObjectInfo {
     const Pro* pro;      // Raw pointer to PRO file (managed by ResourceRepository cache)
     QString frmPath;     // Path to FRM file for thumbnail
     int listIndex;       // Index in the category list
+    // The game this entry was read from: the map's own, or another one picked in the palette's Game
+    // list. pro and frmPath belong to that game's lists, so another game's entry is never placed as
+    // it is: it is brought into the mod first (MainWindow::bringInFromOtherGame).
+    resource::GameResources* resources = nullptr;
+    QString sourceGame; // empty for the map's own game, else the mod tools' id for the other game
 
     ObjectInfo(const QString& fileName, int index)
         : proFileName(fileName)
@@ -78,6 +88,20 @@ class ObjectPalettePanel : public BasePanel {
 public:
     explicit ObjectPalettePanel(resource::GameResources& resources, QWidget* parent = nullptr);
     ~ObjectPalettePanel();
+
+    /// Another game the palette can show, as the mod tools list it (gecko_assets.py sources).
+    struct OtherGame {
+        QString id;
+        QString label;
+    };
+    /// The other games, or none with `note` saying why. Called when the Game list first opens.
+    using GameListProvider = std::function<QList<OtherGame>(QString* note)>;
+    /// A game's data paths, lowest priority first, or none with `error` saying why.
+    using GameLayersProvider = std::function<std::vector<std::filesystem::path>(const QString& id, QString* error)>;
+    void setOtherGameProviders(GameListProvider list, GameLayersProvider layers);
+    /// Drop every other game's data and textures; the palette goes back to the map's own game.
+    void releaseOtherGames();
+    [[nodiscard]] bool showingOtherGame() const { return !_activeGame.isEmpty(); }
 
     // Initialization
     void loadObjects();
@@ -110,6 +134,12 @@ public:
 
 private:
     void setupUI() override;
+    void setupGamePicker();
+    void listOtherGames();
+    void onGameChanged(int index);
+    /// Mount `id`'s layers in a resource set of its own; false (after saying why) when it can't be read.
+    bool loadOtherGame(const QString& id, const QString& label);
+    [[nodiscard]] resource::GameResources& activeResources() const;
     void setupCategoryTabs();
     void setupSearchControls();
     void setupObjectView();
@@ -133,6 +163,15 @@ private:
 
     // UI Components
     QVBoxLayout* _mainLayout = nullptr;
+
+    // Game picker: the map's own game, then the other games the mod tools list
+    QComboBox* _gameCombo = nullptr;
+    QLabel* _gameNote = nullptr;
+    GameListProvider _gameListProvider;
+    GameLayersProvider _gameLayersProvider;
+    bool _gamesListed = false;
+    QString _activeGame; // empty: the map's own game
+    std::map<QString, std::unique_ptr<resource::GameResources>> _otherGames;
 
     // Category tabs
     QTabWidget* _categoryTabs = nullptr;

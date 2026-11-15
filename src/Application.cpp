@@ -28,6 +28,7 @@
 #include "ui/dialogs/SettingsDialog.h"
 #include "state/loader/DataPathLoader.h"
 #include "ui/panels/FileBrowserPanel.h"
+#include "ui/panels/ObjectPalettePanel.h"
 
 namespace geck {
 
@@ -168,6 +169,10 @@ Application::~Application() {
     }
     if (_mainWindow) {
         _mainWindow->stopGameLoop();
+        // Other games shown in the object palette hold textures of their own.
+        if (auto* palette = _mainWindow->getObjectPalettePanel()) {
+            palette->releaseOtherGames();
+        }
     }
     // OpenGL textures must be destroyed while the OpenGL context is still valid;
     // without this we get mutex/context crash during static destruction

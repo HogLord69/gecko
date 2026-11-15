@@ -13,6 +13,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <stdexcept>
+#include <vector>
 
 namespace geck::resource {
 
@@ -31,6 +32,10 @@ public:
     explicit ResourceRepository(DataFileSystem& files);
 
     void clear();
+
+    /// Make the next find()/load() of `path` read it again (a list a newly mounted layer replaced).
+    /// The old copy is kept alive until clear(), so a pointer someone already holds stays valid.
+    void forget(const std::filesystem::path& path);
 
     template <class T>
     [[nodiscard]] T* find(const std::filesystem::path& path) const {
@@ -94,6 +99,7 @@ private:
 
     DataFileSystem& _files;
     std::unordered_map<std::string, std::unique_ptr<IFile>> _resources;
+    std::vector<std::unique_ptr<IFile>> _forgotten; // see forget()
     mutable std::mutex _mutex;
 };
 

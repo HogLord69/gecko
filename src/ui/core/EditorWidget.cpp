@@ -18,6 +18,7 @@
 #include <QPoint>
 #include <QSize>
 #include <QStringList>
+#include <QTimer>
 #include "editing/commands/EdgeEditService.h"
 #include "editing/commands/ObjectCommandController.h"
 #include "format/map/MapScript.h"
@@ -3318,11 +3319,55 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
         return;
     }
 
-    auto mapObject = std::make_shared<MapObject>();
-
     // Placement inherits the cursor ghost's facing, so R-rotating the ghost carries into the drop
     // (the palette-drag ghost is never rotated, so that path keeps direction 0 as before).
     const int placementDirection = _dragPreviewObject ? _dragPreviewObject->getDirection() : 0;
+
+    // Only use actual PIDs from ObjectInfo - fail rather than substitute placeholder PIDs
+    if (!_previewObjectInfo || !_previewObjectInfo->pro) {
+        spdlog::error("EditorWidget: Cannot place object - no ObjectInfo or PRO data available");
+        return;
+    }
+
+    // A piece from another game (the object palette's Game list): its PID and art are that game's,
+    // so it is brought into the mod first and placed under its new PID. After the drop is over,
+    // not inside it: the drag's own event loop is still running here, and bringing it in waits on
+    // the mod tools.
+    if (!_previewObjectInfo->sourceGame.isEmpty()) {
+        const QString source = _previewObjectInfo->sourceGame;
+        const uint32_t sourcePid = _previewObjectInfo->pro->header.PID;
+        QTimer::singleShot(0, this, [this, source, sourcePid, hexPosition, placementDirection]() {
+            if (!_mainWindow || !_session.map()) {
+                return;
+            }
+            const auto pid = _mainWindow->bringInFromOtherGame(source, sourcePid);
+            if (!pid) {
+                return;
+            }
+            try {
+                const Pro* pro = _resources.loadPro(*pid);
+                if (pro == nullptr) {
+                    throw std::runtime_error("its proto did not load");
+                }
+                const std::string frmPath = _resources.frmResolver().resolve(pro->header.FID);
+                placeProtoAt(hexPosition, placementDirection, *pro, QString::fromStdString(frmPath));
+            } catch (const std::exception& e) {
+                spdlog::error("EditorWidget: brought in 0x{:08X} but could not place it: {}", *pid, e.what());
+                QtDialogs::showWarning(this, "Bring In from Another Game",
+                    QString("It is in your mod now (0x%1), but gecko couldn't load it to place it: %2\n\n"
+                            "Tools > Apply New Art puts it in the palette.")
+                        .arg(*pid, 8, 16, QChar('0'))
+                        .arg(e.what()));
+            }
+        });
+        return;
+    }
+
+    placeProtoAt(hexPosition, placementDirection, *_previewObjectInfo->pro, _previewObjectInfo->frmPath);
+}
+
+void EditorWidget::placeProtoAt(int hexPosition, int placementDirection, const Pro& pro, const QString& frmPath) {
+    auto mapObject = std::make_shared<MapObject>();
 
     mapObject->position = hexPosition;
     mapObject->elevation = _session.currentElevation();
@@ -3335,15 +3380,9 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     mapObject->x = 0;
     mapObject->y = 0;
 
-    // Only use actual PIDs from ObjectInfo - fail rather than substitute placeholder PIDs
-    if (!_previewObjectInfo || !_previewObjectInfo->pro) {
-        spdlog::error("EditorWidget: Cannot place object - no ObjectInfo or PRO data available");
-        return;
-    }
-
-    mapObject->pro_pid = _previewObjectInfo->pro->header.PID;
-    mapObject->frm_pid = _previewObjectInfo->pro->header.FID;
-    applyItemDefaults(*mapObject, *_previewObjectInfo->pro);
+    mapObject->pro_pid = pro.header.PID;
+    mapObject->frm_pid = pro.header.FID;
+    applyItemDefaults(*mapObject, pro);
 
     mapObject->sx = 0;
     mapObject->sy = 0;
@@ -3363,15 +3402,15 @@ void EditorWidget::placeObjectAtPosition(sf::Vector2f worldPos) {
     // Create visual Object for immediate display
     try {
         const Frm* frm = nullptr;
-        if (_previewObjectInfo && !_previewObjectInfo->frmPath.isEmpty()) {
-            frm = _resources.repository().load<Frm>(_previewObjectInfo->frmPath.toStdString());
+        if (!frmPath.isEmpty()) {
+            frm = _resources.repository().load<Frm>(frmPath.toStdString());
         }
 
         auto object = std::make_shared<Object>(frm);
         object->setMapObject(mapObject);
 
-        if (frm && _previewObjectInfo && !_previewObjectInfo->frmPath.isEmpty()) {
-            sf::Sprite objectSprite{ _resources.textures().get(_previewObjectInfo->frmPath.toStdString()) };
+        if (frm) {
+            sf::Sprite objectSprite{ _resources.textures().get(frmPath.toStdString()) };
             object->setSprite(std::move(objectSprite));
             object->setDirection(static_cast<ObjectDirection>(placementDirection));
         }
