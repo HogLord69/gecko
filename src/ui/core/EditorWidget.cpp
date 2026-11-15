@@ -2014,8 +2014,8 @@ namespace {
 // A moved scenery or wall piece becomes picture only (NO_BLOCK, SHOOT_THRU, LIGHT_THRU), and an
 // invisible Block Hex Auto Inviso goes on its old hex with the piece's own blocking flags, so
 // walking, shots and sight there are as before (object.cc _obj_blocking_at, _obj_shoot_blocking_at,
-// _obj_sight_blocking_at). Nothing moves onto a door, stairs, ladder or exit-grid hex. FOCMod's
-// tools/game_order.py made the maps saved before this agree with it in the same way.
+// _obj_sight_blocking_at). Nothing moves onto a door, stairs, ladder or exit-grid hex. Maps saved
+// before this can be brought into the same order outside the editor, the same way.
 void EditorWidget::reorderSelectedObjects(object_order::Step step) {
     auto* selectionManager = _session.selectionManager();
     if (!_session.map() || !selectionManager) {
@@ -2249,8 +2249,8 @@ void EditorWidget::reorderSelectedObjects(object_order::Step step) {
 // floor) within kReach px; failing that it keeps the nearest hex and stops blocking, as the
 // furniture under it blocks. An item keeps an open hex beside it to be picked up from. A piece
 // sits on another when it is less than half its size and its foot (the bottom middle of its
-// picture) is on the other's opaque pixels, above the other's own foot. The same rule as
-// FOCMod's tools/stand_on.py, which fixes maps outside the editor.
+// picture) is on the other's opaque pixels, above the other's own foot. The same rule can fix
+// maps outside the editor.
 void EditorWidget::putSelectedOnTop() {
     auto* selectionManager = _session.selectionManager();
     if (!_session.map() || !selectionManager) {
