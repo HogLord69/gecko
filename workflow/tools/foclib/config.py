@@ -69,7 +69,7 @@ def base_dir() -> Path:
 
 
 def stamps_dir() -> Path:
-    """Root of the stamp library: it contains 'Fallout 2 Stamps', 'Sonora Stamps', ..."""
+    """Root of the stamp library: a folder per game ('Fallout 2', 'Sonora', ...) and 'HogLord Props'."""
     configured = _path(load().get("stamps"))
     if configured:
         return configured

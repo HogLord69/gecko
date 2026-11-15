@@ -12,7 +12,9 @@
 #include <QIcon>
 #include <QLabel>
 #include <QListWidget>
+#include <QCollator>
 #include <QRegularExpression>
+#include <QSortFilterProxyModel>
 #include <QPushButton>
 #include <QSplitter>
 #include <QTreeView>
@@ -29,6 +31,39 @@ namespace geck {
 namespace {
     constexpr int THUMBNAIL_SIZE = 96;
     constexpr int PATH_ROLE = Qt::UserRole + 1;
+
+    /// The stamp library's order: size folders smallest first (Small, Medium, Large, Huge, as
+    /// tools/organize_stamps.py names them), everything else by name with numbers read as numbers
+    /// ("#3" before "#13").
+    int sizeRank(const QString& name) {
+        static const QStringList sizes{ "Small", "Medium", "Large", "Huge" };
+        return static_cast<int>(sizes.indexOf(name));
+    }
+
+    bool libraryLess(const QString& left, const QString& right) {
+        const int l = sizeRank(left);
+        const int r = sizeRank(right);
+        if (l >= 0 && r >= 0) {
+            return l < r;
+        }
+        static const QCollator collator = [] {
+            QCollator c;
+            c.setNumericMode(true);
+            c.setCaseSensitivity(Qt::CaseInsensitive);
+            return c;
+        }();
+        return collator.compare(left, right) < 0;
+    }
+
+    class LibraryOrder final : public QSortFilterProxyModel {
+    public:
+        using QSortFilterProxyModel::QSortFilterProxyModel;
+
+    protected:
+        bool lessThan(const QModelIndex& left, const QModelIndex& right) const override {
+            return libraryLess(left.data().toString(), right.data().toString());
+        }
+    };
 
     /// The folder a converted stamp goes in, under Custom: "From <game>", without the characters a
     /// Windows folder name can't hold (gecko_assets.py stamp-convert names it the same way).
@@ -58,9 +93,12 @@ PatternBrowserDialog::PatternBrowserDialog(resource::GameResources& resources, Q
     _folderModel->setRootPath(root);
     _folderModel->setFilter(QDir::Dirs | QDir::NoDotAndDotDot);
 
+    _folderOrder = new LibraryOrder(this);
+    _folderOrder->setSourceModel(_folderModel);
+    _folderOrder->sort(0);
     _folderTree = new QTreeView(this);
-    _folderTree->setModel(_folderModel);
-    _folderTree->setRootIndex(_folderModel->index(root));
+    _folderTree->setModel(_folderOrder);
+    _folderTree->setRootIndex(_folderOrder->mapFromSource(_folderModel->index(root)));
     _folderTree->setHeaderHidden(true);
     for (int column = 1; column < _folderModel->columnCount(); ++column) {
         _folderTree->hideColumn(column); // show names only, not size/type/date
@@ -86,10 +124,13 @@ PatternBrowserDialog::PatternBrowserDialog(resource::GameResources& resources, Q
         _bundledModel->setRootPath(bundled);
         _bundledModel->setFilter(QDir::Dirs | QDir::NoDotAndDotDot);
         _bundledModel->setReadOnly(true);
+        _bundledOrder = new LibraryOrder(this);
+        _bundledOrder->setSourceModel(_bundledModel);
+        _bundledOrder->sort(0);
         _bundledTree = new QTreeView(folders);
         _bundledTree->setObjectName("bundledStampsTree");
-        _bundledTree->setModel(_bundledModel);
-        _bundledTree->setRootIndex(_bundledModel->index(bundled));
+        _bundledTree->setModel(_bundledOrder);
+        _bundledTree->setRootIndex(_bundledOrder->mapFromSource(_bundledModel->index(bundled)));
         _bundledTree->setHeaderHidden(true);
         for (int column = 1; column < _bundledModel->columnCount(); ++column) {
             _bundledTree->hideColumn(column);
@@ -130,7 +171,7 @@ PatternBrowserDialog::PatternBrowserDialog(resource::GameResources& resources, Q
 
     // Open on the user's own patterns. The tree lists folders only, so the root itself can't be
     // picked; selecting Custom also stops the tree defaulting to its first (library) folder.
-    const QModelIndex custom = _folderModel->index(pattern::PatternLibrary::customDir());
+    const QModelIndex custom = _folderOrder->mapFromSource(_folderModel->index(pattern::PatternLibrary::customDir()));
     if (custom.isValid()) {
         _folderTree->setCurrentIndex(custom); // currentChanged fills the grid
         _folderTree->scrollTo(custom);
@@ -174,7 +215,7 @@ void PatternBrowserDialog::onFolderSelected(const QModelIndex& index) {
         }
         _currentGame.reset();
         _gameNote->setVisible(false);
-        populateGrid(_folderModel->filePath(index), &_resources);
+        populateGrid(_folderModel->filePath(_folderOrder->mapToSource(index)), &_resources);
     }
 }
 
@@ -185,7 +226,7 @@ void PatternBrowserDialog::onBundledFolderSelected(const QModelIndex& index) {
     const QSignalBlocker block(_folderTree->selectionModel());
     _folderTree->clearSelection();
     _folderTree->setCurrentIndex({});
-    const QString folder = _bundledModel->filePath(index);
+    const QString folder = _bundledModel->filePath(_bundledOrder->mapToSource(index));
     _currentGame = bundledGame(folder);
     resource::GameResources* resources = &_resources;
     if (_currentGame) {
@@ -209,7 +250,8 @@ void PatternBrowserDialog::populateGrid(const QString& folder, resource::GameRes
     _grid->clear();
 
     const QDir dir(folder);
-    const QStringList files = dir.entryList({ QStringLiteral("*.json") }, QDir::Files, QDir::Name);
+    QStringList files = dir.entryList({ QStringLiteral("*.json") }, QDir::Files);
+    std::sort(files.begin(), files.end(), libraryLess);
     for (const QString& file : files) {
         const QString path = dir.filePath(file);
         const auto pattern = loadPattern(path);
@@ -268,7 +310,7 @@ void PatternBrowserDialog::onImport() {
     // one of their folders is open goes to the user's own Custom folder.
     const QString bundled = pattern::PatternLibrary::bundledDir();
     if (!bundled.isEmpty() && QFileInfo(_currentFolder).canonicalFilePath().startsWith(bundled, Qt::CaseInsensitive)) {
-        _folderTree->setCurrentIndex(_folderModel->index(pattern::PatternLibrary::customDir()));
+        _folderTree->setCurrentIndex(_folderOrder->mapFromSource(_folderModel->index(pattern::PatternLibrary::customDir())));
     }
     const QString target = QDir(_currentFolder).filePath(QFileInfo(source).fileName());
     if (QFileInfo(source) != QFileInfo(target)) {

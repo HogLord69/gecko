@@ -21,6 +21,7 @@
 
 #include <QMouseEvent>
 #include <QPainter>
+#include <QSortFilterProxyModel>
 #include <QTimer>
 
 #include <QApplication>
@@ -127,6 +128,30 @@ void saveImage(const QImage& image, const QString& name) {
     REQUIRE(image.save(QDir(env("GECKO_SHOTS_DIR")).filePath(name)));
 }
 
+
+// The Pattern Library's trees show their folder model through a sort layer (sizes smallest first):
+// the index of a folder, and the folder of an index, go through it.
+QModelIndex folderIndex(QTreeView* tree, const QString& path) {
+    auto* order = qobject_cast<QSortFilterProxyModel*>(tree->model());
+        auto* files = qobject_cast<QFileSystemModel*>(order->sourceModel());
+        return order->mapFromSource(files->index(path));
+}
+
+QFileSystemModel* folderModel(QTreeView* tree) {
+    auto* order = qobject_cast<QSortFilterProxyModel*>(tree->model());
+    return order ? qobject_cast<QFileSystemModel*>(order->sourceModel()) : nullptr;
+}
+
+/// Open the tree down to `path` (each folder above it expanded) and select it.
+void revealFolder(QTreeView* tree, const QString& root, const QString& below) {
+    QString at = root;
+    for (const QString& part : below.split('/')) {
+        at = QDir(at).filePath(part);
+        tree->expand(folderIndex(tree, QFileInfo(at).path()));
+    }
+    tree->setCurrentIndex(folderIndex(tree, at));
+}
+
 int labelsWithPictures(const QWidget& widget) {
     int n = 0;
     for (const auto* label : widget.findChildren<QLabel*>()) {
@@ -200,14 +225,11 @@ TEST_CASE("README pictures", "[.readme]") {
         dialog.resize(980, 600);
         auto* tree = dialog.findChild<QTreeView*>("bundledStampsTree");
         REQUIRE(tree != nullptr);
-        auto* model = qobject_cast<QFileSystemModel*>(tree->model());
-        const QString pick = env("GECKO_SHOTS_STAMP_FOLDER").isEmpty() ? QString("Fallout 2 Stamps/Adobe")
+        const QString pick = env("GECKO_SHOTS_STAMP_FOLDER").isEmpty() ? QString("Fallout 2/Buildings/Adobe/Medium")
                                                                        : env("GECKO_SHOTS_STAMP_FOLDER");
-        const QString folder = QDir(bundled).filePath(pick);
         dialog.show();
         wait(1500);
-        tree->expand(model->index(QFileInfo(folder).path()));
-        tree->setCurrentIndex(model->index(folder));
+        revealFolder(tree, bundled, pick);
         save(dialog, env("GECKO_SHOTS_STAMP_FOLDER").isEmpty() ? QString("pattern-library.png")
                                                                 : "stamps-" + QString(pick).replace('/', '-').replace(' ', '_') + ".png");
     }
@@ -238,12 +260,10 @@ TEST_CASE("README pictures", "[.readme]") {
         dialog.resize(980, 640);
         auto* tree = dialog.findChild<QTreeView*>("bundledStampsTree");
         REQUIRE(tree != nullptr);
-        auto* model = qobject_cast<QFileSystemModel*>(tree->model());
         const QString bundled = geck::pattern::PatternLibrary::bundledDir();
         dialog.show();
         wait(1500);
-        tree->expand(model->index(QDir(bundled).filePath("Sonora Stamps")));
-        tree->setCurrentIndex(model->index(QDir(bundled).filePath("Sonora Stamps/Adobe")));
+        revealFolder(tree, bundled, "Sonora/Buildings/Brick & Concrete/Medium");
         save(dialog, "stamps-other-game.png");
     }
 

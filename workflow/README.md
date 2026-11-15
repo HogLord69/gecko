@@ -79,11 +79,12 @@ A **stamp** is a piece of a map (a building with its walls, floor, roof and furn
 that you drop into your own map in gecko with **Edit → Stamp Pattern**.
 
 * **Ready-made:** [`resources/stamps`](../resources/stamps) (`stamps` in the zip) has
-  1,567 stamps cut from Fallout 1, Fallout 2 and four total conversions, sorted by what
-  they're built from, plus 21 props of my own (`HogLord Props`). To use
-  them in gecko, copy the folders you want into `%LOCALAPPDATA%\gecko\gecko\patterns\`.
-  Only the `Fallout 2 Stamps` folder draws correctly in your mod as it is. The others hold
-  their own game's ids, so see the next point.
+  1,567 stamps cut from Fallout 1, Fallout 2 and four total conversions, a folder per
+  game laid out the same way (buildings by what they're built from and by size,
+  graveyards, junkyards, ruins by size), plus 21 props of my own (`HogLord Props`).
+  gecko lists them in Edit → Stamp Pattern as "Came with gecko". `Fallout 2` and
+  `HogLord Props` stamp as they are; another game's stamp is converted into your mod's
+  ids when you pick it, once that game is set up here (`python setup.py`).
 * **Your own, from any game you own:**
 
   ```bat

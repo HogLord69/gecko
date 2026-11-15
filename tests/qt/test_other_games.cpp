@@ -11,6 +11,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFileSystemModel>
+#include <QSortFilterProxyModel>
 #include <QLabel>
 #include <QListWidget>
 #include <QTreeView>
@@ -38,6 +39,32 @@ std::filesystem::path makeGame(const std::filesystem::path& root) {
     std::filesystem::copy_file(geck::test::dataPath("test_item_drug_radx.pro"), root / "proto" / "items" / "00000001.pro");
     write(root / "proto" / "items" / "items.lst", "00000001.pro\r\n");
     return root;
+}
+
+
+// The Pattern Library's trees show their folder model through a sort layer (sizes smallest first):
+// the index of a folder, and the folder of an index, go through it.
+QModelIndex folderIndex(QTreeView* tree, const QString& path) {
+    auto* order = qobject_cast<QSortFilterProxyModel*>(tree->model());
+    REQUIRE(order != nullptr);
+    auto* files = qobject_cast<QFileSystemModel*>(order->sourceModel());
+    REQUIRE(files != nullptr);
+    return order->mapFromSource(files->index(path));
+}
+
+QFileSystemModel* folderModel(QTreeView* tree) {
+    auto* order = qobject_cast<QSortFilterProxyModel*>(tree->model());
+    return order ? qobject_cast<QFileSystemModel*>(order->sourceModel()) : nullptr;
+}
+
+/// Open the tree down to `path` (each folder above it expanded) and select it.
+void revealFolder(QTreeView* tree, const QString& root, const QString& below) {
+    QString at = root;
+    for (const QString& part : below.split('/')) {
+        at = QDir(at).filePath(part);
+        tree->expand(folderIndex(tree, QFileInfo(at).path()));
+    }
+    tree->setCurrentIndex(folderIndex(tree, at));
 }
 
 } // namespace
@@ -190,16 +217,17 @@ TEST_CASE("The Pattern Library lists the stamps that came with gecko under the u
     geck::PatternBrowserDialog dialog(resources);
     auto* tree = dialog.findChild<QTreeView*>("bundledStampsTree");
     REQUIRE(tree != nullptr);
-    auto* model = qobject_cast<QFileSystemModel*>(tree->model());
+    auto* model = folderModel(tree);
     REQUIRE(model != nullptr);
-    CHECK(QFileInfo(model->filePath(tree->rootIndex())).canonicalFilePath() == bundled);
+    auto* order = qobject_cast<QSortFilterProxyModel*>(tree->model());
+    CHECK(QFileInfo(model->filePath(order->mapToSource(tree->rootIndex()))).canonicalFilePath() == bundled);
     CHECK(model->isReadOnly());
-    CHECK(QDir(bundled).exists("Fallout 2 Stamps"));
+    CHECK(QDir(bundled).exists("Fallout 2"));
 }
 
 TEST_CASE("The Pattern Library draws another game's stamps with its data and says it converts them", "[qt][othergames]") {
     const QString bundled = geck::pattern::PatternLibrary::bundledDir();
-    if (bundled.isEmpty() || !QDir(bundled).exists("Sonora Stamps/Adobe")) {
+    if (bundled.isEmpty() || !QDir(bundled).exists("Sonora/Buildings/Adobe/Medium")) {
         SKIP("no stamps beside this test program");
     }
     geck::resource::GameResources own;
@@ -209,8 +237,8 @@ TEST_CASE("The Pattern Library draws another game's stamps with its data and say
     dialog.setOtherGames(
         []() {
             return std::map<QString, geck::PatternBrowserDialog::StampGame>{
-                { "Sonora Stamps", { "sonora", "Fallout: Sonora", true, {} } },
-                { "Olympus Stamps", { "olympus", "Olympus 2207", false, "left out here" } },
+                { "Sonora", { "sonora", "Fallout: Sonora", true, {} } },
+                { "Olympus", { "olympus", "Olympus 2207", false, "left out here" } },
             };
         },
         [&asked, &sonora](const QString& id, const QString&) -> geck::resource::GameResources* {
@@ -220,7 +248,6 @@ TEST_CASE("The Pattern Library draws another game's stamps with its data and say
     dialog.show();
     auto* tree = dialog.findChild<QTreeView*>("bundledStampsTree");
     REQUIRE(tree != nullptr);
-    auto* model = qobject_cast<QFileSystemModel*>(tree->model());
     auto* grid = dialog.findChild<QListWidget*>();
     REQUIRE(grid != nullptr);
     const auto note = [&dialog]() {
@@ -232,7 +259,7 @@ TEST_CASE("The Pattern Library draws another game's stamps with its data and say
         return QString();
     };
 
-    tree->setCurrentIndex(model->index(QDir(bundled).filePath("Sonora Stamps/Adobe")));
+    revealFolder(tree, bundled, "Sonora/Buildings/Adobe/Medium");
     CHECK(asked == QStringList{ "sonora" });
     CHECK(note().contains("Fallout: Sonora"));
     CHECK(note().contains("Custom > From Fallout Sonora")); // the folder stamp-convert writes
@@ -242,11 +269,11 @@ TEST_CASE("The Pattern Library draws another game's stamps with its data and say
     CHECK(dialog.selectedPath().endsWith(".json"));
     CHECK(dialog.selectedPattern().has_value());
 
-    tree->setCurrentIndex(model->index(QDir(bundled).filePath("Olympus Stamps")));
+    revealFolder(tree, bundled, "Olympus");
     CHECK(asked == QStringList{ "sonora" }); // a game that isn't set up is never loaded
     CHECK(note().contains("left out here"));
 
-    tree->setCurrentIndex(model->index(QDir(bundled).filePath("Fallout 2 Stamps/Adobe")));
+    revealFolder(tree, bundled, "Fallout 2/Buildings/Adobe/Medium");
     CHECK(note().isEmpty()); // the map's own numbers: nothing to convert
     REQUIRE(grid->count() > 0);
     Q_EMIT grid->itemActivated(grid->item(0));

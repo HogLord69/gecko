@@ -859,9 +859,10 @@ def build_overlay() -> list[str]:
 # copy with port_stamp.py: pieces and tiles matched to the mod's or brought in. The files that brought
 # in go into the overlay, as for port, so the converted stamp draws right at once.
 
-STAMP_FOLDERS = {"Fallout 1 Stamps": "fo1", "Nevada Stamps": "nevada", "Olympus Stamps": "olympus",
-                 "Resurrection Stamps": "resurrection", "Sonora Stamps": "sonora"}
-NATIVE_STAMP_FOLDERS = ["Fallout 2 Stamps", "HogLord Props"]   # in Fallout 2's own numbers already
+# gecko's stamps folder, one top folder per game (tools/organize_stamps.py)
+STAMP_FOLDERS = {"Fallout 1": "fo1", "Nevada": "nevada", "Olympus": "olympus", "Resurrection": "resurrection",
+                 "Sonora": "sonora"}
+NATIVE_STAMP_FOLDERS = ["Fallout 2", "HogLord Props"]           # in Fallout 2's own numbers already
 
 
 def cmd_stamp_games(_args) -> dict:
@@ -870,7 +871,7 @@ def cmd_stamp_games(_args) -> dict:
     folders = {}
     for folder, sid in STAMP_FOLDERS.items():
         entry = srcs.get(sid)
-        label = source_label(entry, sid) if entry else folder[: -len(" Stamps")]
+        label = source_label(entry, sid) if entry else folder
         why = left_out(entry) if entry else ("not set up here: run python setup.py in the workflow folder and "
                                              "give it this game's folder")
         folders[folder] = {"id": sid, "label": label, "available": why is None, "why": why or ""}
@@ -906,9 +907,9 @@ def cmd_stamp_convert(args) -> dict:
     src = Path(args.stamp)
     if not src.is_file():
         raise Refused(f"No stamp at {src}.")
-    # Custom/From <game>/<the folders below "<Game> Stamps">/<name>.json
+    # Custom/From <game>/<the folders below the game's own folder>/<name>.json
     parts = src.parts
-    below = [i for i, p in enumerate(parts) if p.endswith(" Stamps")]
+    below = [i for i, p in enumerate(parts) if p in STAMP_FOLDERS or p.removesuffix(" Stamps") in STAMP_FOLDERS]
     rel = Path(*parts[below[-1] + 1:]) if below else Path(src.name)
     folder = "From " + re.sub(r'[<>:"/\\|?*]', "", label).strip()
     dest = port_stamp.CUSTOM / folder / rel

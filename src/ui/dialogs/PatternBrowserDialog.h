@@ -12,6 +12,7 @@
 
 class QFileSystemModel;
 class QLabel;
+class QSortFilterProxyModel;
 class QListWidget;
 class QListWidgetItem;
 class QModelIndex;
@@ -69,8 +70,10 @@ private:
     resource::GameResources& _resources;
     std::unique_ptr<HexagonGrid> _hexgrid;
     QFileSystemModel* _folderModel = nullptr;
+    QSortFilterProxyModel* _folderOrder = nullptr; ///< the library's own order (see LibraryOrder)
     QTreeView* _folderTree = nullptr;
     QFileSystemModel* _bundledModel = nullptr; ///< null when gecko came with no stamps
+    QSortFilterProxyModel* _bundledOrder = nullptr;
     QTreeView* _bundledTree = nullptr;
     QLabel* _gameNote = nullptr;
     StampGamesProvider _stampGames;
