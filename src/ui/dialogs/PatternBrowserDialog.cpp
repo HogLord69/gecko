@@ -9,6 +9,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QIcon>
+#include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
 #include <QSplitter>
@@ -64,8 +65,37 @@ PatternBrowserDialog::PatternBrowserDialog(resource::GameResources& resources, Q
     _grid->setMovement(QListView::Static);
     _grid->setWordWrap(true);
 
+    // Left: the user's own stamps, then the ones that came with gecko, each a folder tree.
+    auto* folders = new QWidget(this);
+    auto* foldersLayout = new QVBoxLayout(folders);
+    foldersLayout->setContentsMargins(0, 0, 0, 0);
+    foldersLayout->addWidget(new QLabel("Your stamps", folders));
+    foldersLayout->addWidget(_folderTree, 1);
+    const QString bundled = pattern::PatternLibrary::bundledDir();
+    if (!bundled.isEmpty()) {
+        _bundledModel = new QFileSystemModel(this);
+        _bundledModel->setRootPath(bundled);
+        _bundledModel->setFilter(QDir::Dirs | QDir::NoDotAndDotDot);
+        _bundledModel->setReadOnly(true);
+        _bundledTree = new QTreeView(folders);
+        _bundledTree->setObjectName("bundledStampsTree");
+        _bundledTree->setModel(_bundledModel);
+        _bundledTree->setRootIndex(_bundledModel->index(bundled));
+        _bundledTree->setHeaderHidden(true);
+        for (int column = 1; column < _bundledModel->columnCount(); ++column) {
+            _bundledTree->hideColumn(column);
+        }
+        auto* heading = new QLabel("Came with gecko", folders);
+        heading->setToolTip("Each folder is for the game it is named after: a stamp holds that game's "
+                            "object numbers, not pictures.");
+        foldersLayout->addWidget(heading);
+        foldersLayout->addWidget(_bundledTree, 2);
+        connect(_bundledTree->selectionModel(), &QItemSelectionModel::currentChanged,
+            this, [this](const QModelIndex& current, const QModelIndex&) { onBundledFolderSelected(current); });
+    }
+
     auto* splitter = new QSplitter(this);
-    splitter->addWidget(_folderTree);
+    splitter->addWidget(folders);
     splitter->addWidget(_grid);
     splitter->setStretchFactor(0, 1);
     splitter->setStretchFactor(1, 3);
@@ -99,7 +129,21 @@ PatternBrowserDialog::~PatternBrowserDialog() = default;
 
 void PatternBrowserDialog::onFolderSelected(const QModelIndex& index) {
     if (index.isValid()) {
+        if (_bundledTree) {
+            const QSignalBlocker block(_bundledTree->selectionModel());
+            _bundledTree->clearSelection();
+            _bundledTree->setCurrentIndex({});
+        }
         populateGrid(_folderModel->filePath(index));
+    }
+}
+
+void PatternBrowserDialog::onBundledFolderSelected(const QModelIndex& index) {
+    if (index.isValid()) {
+        const QSignalBlocker block(_folderTree->selectionModel());
+        _folderTree->clearSelection();
+        _folderTree->setCurrentIndex({});
+        populateGrid(_bundledModel->filePath(index));
     }
 }
 
@@ -151,6 +195,12 @@ void PatternBrowserDialog::onImport() {
         return;
     }
 
+    // The stamps that came with gecko are read where they are, never written to: an import while
+    // one of their folders is open goes to the user's own Custom folder.
+    const QString bundled = pattern::PatternLibrary::bundledDir();
+    if (!bundled.isEmpty() && QFileInfo(_currentFolder).canonicalFilePath().startsWith(bundled, Qt::CaseInsensitive)) {
+        _folderTree->setCurrentIndex(_folderModel->index(pattern::PatternLibrary::customDir()));
+    }
     const QString target = QDir(_currentFolder).filePath(QFileInfo(source).fileName());
     if (QFileInfo(source) != QFileInfo(target)) {
         QFile::remove(target);

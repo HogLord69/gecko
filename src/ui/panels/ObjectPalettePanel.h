@@ -4,6 +4,7 @@
 #include "ui/palette/PaletteModel.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/palette/PaletteView.h"
+#include <QCheckBox>
 #include <QComboBox>
 #include <QList>
 #include <QSortFilterProxyModel>
@@ -13,6 +14,8 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <optional>
+#include <set>
 #include <vector>
 #include <memory>
 #include <optional>
@@ -96,8 +99,15 @@ public:
     };
     /// The other games, or none with `note` saying why. Called when the Game list first opens.
     using GameListProvider = std::function<QList<OtherGame>(QString* note)>;
-    /// A game's data paths, lowest priority first, or none with `error` saying why.
-    using GameLayersProvider = std::function<std::vector<std::filesystem::path>(const QString& id, QString* error)>;
+    /// What the palette needs to show another game.
+    struct OtherGameData {
+        std::vector<std::filesystem::path> layers; ///< its data paths, lowest priority first
+        /// Per proto folder ("scenery", "walls", ...), the 1-based .lst lines of the pieces whose
+        /// picture the map's own game doesn't have. A folder that is missing is not filtered.
+        std::map<QString, std::set<int>> newPieces;
+    };
+    /// A game's data, or nothing with `error` saying why.
+    using GameLayersProvider = std::function<std::optional<OtherGameData>(const QString& id, QString* error)>;
     void setOtherGameProviders(GameListProvider list, GameLayersProvider layers);
     /// Drop every other game's data and textures; the palette goes back to the map's own game.
     void releaseOtherGames();
@@ -167,6 +177,8 @@ private:
     // Game picker: the map's own game, then the other games the mod tools list
     QComboBox* _gameCombo = nullptr;
     QLabel* _gameNote = nullptr;
+    QCheckBox* _onlyNewCheck = nullptr; ///< another game: only the pieces the map's game doesn't have
+    std::map<QString, std::map<QString, std::set<int>>> _newPieces; ///< per other game, see OtherGameData
     GameListProvider _gameListProvider;
     GameLayersProvider _gameLayersProvider;
     bool _gamesListed = false;

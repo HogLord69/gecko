@@ -13,6 +13,7 @@
 #include "ui/theme/ThemeManager.h"
 #include "ui/QtDialogs.h"
 
+#include <QCheckBox>
 #include <QPainter>
 #include <QStandardItemModel>
 #include <QMouseEvent>
@@ -108,6 +109,19 @@ void ObjectPalettePanel::setupGamePicker() {
     row->addWidget(_gameCombo, 1);
     _mainLayout->addLayout(row);
 
+    _onlyNewCheck = new QCheckBox("Only pieces Fallout 2 doesn't have", this);
+    _onlyNewCheck->setObjectName("onlyNewPieces");
+    _onlyNewCheck->setChecked(true);
+    _onlyNewCheck->setToolTip("Leave out the pieces whose picture your own game already has: the Fallout 2 "
+                              "pieces every total conversion carries.");
+    _onlyNewCheck->setVisible(false);
+    connect(_onlyNewCheck, &QCheckBox::toggled, this, [this]() {
+        clearObjectSelection();
+        loadCategoryObjects(_currentCategory);
+        rebuildItems();
+    });
+    _mainLayout->addWidget(_onlyNewCheck);
+
     _gameNote = new QLabel(this);
     _gameNote->setWordWrap(true);
     _gameNote->setStyleSheet(ui::theme::styles::italicSecondaryText());
@@ -164,6 +178,7 @@ void ObjectPalettePanel::onGameChanged(int index) {
                                "numbers, and Tools > Apply New Art puts it in the game.")
                            .arg(label));
     _gameNote->setVisible(!id.isEmpty());
+    _onlyNewCheck->setVisible(!id.isEmpty() && _newPieces.contains(id));
 
     clearObjectSelection();
     _objectsByCategory.clear();
@@ -174,9 +189,15 @@ void ObjectPalettePanel::onGameChanged(int index) {
 bool ObjectPalettePanel::loadOtherGame(const QString& id, const QString& label) {
     QString error;
     std::vector<std::filesystem::path> layers;
+    std::optional<std::map<QString, std::set<int>>> newPieces;
     QApplication::setOverrideCursor(Qt::WaitCursor);
     if (_gameLayersProvider) {
-        layers = _gameLayersProvider(id, &error);
+        if (auto gameData = _gameLayersProvider(id, &error)) {
+            layers = std::move(gameData->layers);
+            if (!gameData->newPieces.empty()) {
+                newPieces = std::move(gameData->newPieces);
+            }
+        }
     }
     auto game = std::make_unique<resource::GameResources>();
     try {
@@ -200,6 +221,9 @@ bool ObjectPalettePanel::loadOtherGame(const QString& id, const QString& label) 
     }
     spdlog::info("ObjectPalettePanel: loaded {} ({} data paths) for the Game picker", label.toStdString(), layers.size());
     _otherGames[id] = std::move(game);
+    if (newPieces) {
+        _newPieces[id] = std::move(*newPieces);
+    }
     return true;
 }
 
@@ -232,6 +256,10 @@ void ObjectPalettePanel::releaseOtherGames() {
         game->clearCaches(); // textures go while the GL context is still there
     }
     _otherGames.clear();
+    _newPieces.clear();
+    if (_onlyNewCheck) {
+        _onlyNewCheck->setVisible(false);
+    }
 }
 
 void ObjectPalettePanel::setupCategoryTabs() {
@@ -335,10 +363,24 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
 
         const auto& proFiles = lst->list();
         int loadedCount = 0;
+
+        // Another game, with "Only pieces Fallout 2 doesn't have": just the lines the mod tools named.
+        const std::set<int>* onlyLines = nullptr;
+        if (!_activeGame.isEmpty() && _onlyNewCheck && _onlyNewCheck->isChecked()) {
+            if (const auto game = _newPieces.find(_activeGame); game != _newPieces.end()) {
+                if (const auto lines = game->second.find(getCategoryDisplayName(category).toLower());
+                    lines != game->second.end()) {
+                    onlyLines = &lines->second;
+                }
+            }
+        }
         // Load ALL objects - no artificial limit
         int totalObjects = static_cast<int>(proFiles.size());
 
         for (int i = 0; i < totalObjects; ++i) {
+            if (onlyLines && !onlyLines->contains(i + 1)) {
+                continue;
+            }
             try {
                 const std::string& proFileName = proFiles[i];
                 QString qProFileName = QString::fromStdString(proFileName);

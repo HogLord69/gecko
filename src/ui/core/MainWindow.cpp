@@ -1,6 +1,7 @@
 #define QT_NO_EMIT
 #include "MainWindow.h"
 #include "Application.h"
+#include "version.h"
 #include "EditorWidget.h"
 #include "format/map/MapScript.h"
 #include "util/GameDataPathResolver.h"
@@ -156,7 +157,7 @@ MainWindow::MainWindow(std::shared_ptr<resource::GameResources> resources, std::
     , _fileBrowserPanelAction(nullptr)
     , _isRunning(false) {
 
-    setWindowTitle("Gecko - Fallout 2 Map Editor");
+    setWindowTitle(QStringLiteral("%1 - Fallout 2 Map Editor").arg(geck::version::displayName));
     setMinimumSize(ui::constants::dialog_sizes::MAIN_WINDOW_MIN_WIDTH, ui::constants::dialog_sizes::MAIN_WINDOW_MIN_HEIGHT);
 
     setDockOptions(QMainWindow::AllowTabbedDocks | QMainWindow::AllowNestedDocks | QMainWindow::AnimatedDocks);
@@ -1758,7 +1759,7 @@ void MainWindow::updateAndRender() {
 }
 
 void MainWindow::updateWindowTitle() {
-    const QString base = QStringLiteral("Gecko - Fallout 2 Map Editor");
+    const QString base = QStringLiteral("%1 - Fallout 2 Map Editor").arg(geck::version::displayName);
     const Map* map = _currentEditorWidget ? _currentEditorWidget->getMap() : nullptr;
     if (map && !map->filename().empty()) {
         // Use a literal "*" so the modified marker is visible on every platform (Qt's "[*]" +
@@ -3140,18 +3141,28 @@ void MainWindow::connectOtherGames() {
             }
             return games;
         },
-        [this](const QString& id, QString* error) {
-            std::vector<std::filesystem::path> layers;
+        [this](const QString& id, QString* error) -> std::optional<ObjectPalettePanel::OtherGameData> {
+            showStatusMessage("Reading the other game. The first time, finding the pieces Fallout 2 doesn't "
+                              "have takes a few seconds.");
             ModToolsRunner runner(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()), _settings->getPythonExecutable());
-            const ModToolResult result = runner.runAndWait({ "source", id });
+            const ModToolResult result = runner.runAndWait({ "source", id, "--new" });
+            clearStatusMessage();
             if (!result.ok) {
                 *error = result.error;
-                return layers;
+                return std::nullopt;
             }
+            ObjectPalettePanel::OtherGameData data;
             for (const auto& value : result.json.value("paths").toArray()) {
-                layers.emplace_back(value.toString().toStdU16String());
+                data.layers.emplace_back(value.toString().toStdU16String());
             }
-            return layers;
+            const QJsonObject pieces = result.json.value("new").toObject();
+            for (auto it = pieces.constBegin(); it != pieces.constEnd(); ++it) {
+                auto& lines = data.newPieces[it.key()];
+                for (const auto& line : it.value().toArray()) {
+                    lines.insert(line.toInt());
+                }
+            }
+            return data;
         });
 }
 

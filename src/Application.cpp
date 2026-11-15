@@ -39,7 +39,7 @@ Application::Application(int argc, char** argv)
     , _resources(std::make_shared<resource::GameResources>()) {
 
     _qtApp->setApplicationName(geck::version::name);
-    _qtApp->setApplicationDisplayName(geck::version::name);
+    _qtApp->setApplicationDisplayName(geck::version::displayName);
     _qtApp->setApplicationVersion(geck::version::string);
 
     // Mirror every log record into the Log panel's model from here on, so load-time warnings

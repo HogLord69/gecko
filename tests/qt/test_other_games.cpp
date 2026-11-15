@@ -4,7 +4,14 @@
 #include "resource/GameResources.h"
 #include "support/Fixtures.h"
 #include "ui/panels/ObjectPalettePanel.h"
+#include "pattern/PatternLibrary.h"
+#include "ui/dialogs/PatternBrowserDialog.h"
 
+#include <QCheckBox>
+#include <QDir>
+#include <QFileInfo>
+#include <QFileSystemModel>
+#include <QTreeView>
 #include <QComboBox>
 #include <QTemporaryDir>
 
@@ -71,12 +78,15 @@ TEST_CASE("The object palette shows another game's pieces and goes back to its o
             ++listed;
             return QList<geck::ObjectPalettePanel::OtherGame>{ { "other", "Other Game" } };
         },
-        [&other](const QString& id, QString* error) {
+        [&other](const QString& id, QString* error) -> std::optional<geck::ObjectPalettePanel::OtherGameData> {
             if (id != "other") {
                 *error = "unknown";
-                return std::vector<std::filesystem::path>{};
+                return std::nullopt;
             }
-            return std::vector<std::filesystem::path>{ other };
+            geck::ObjectPalettePanel::OtherGameData data;
+            data.layers = { other };
+            data.newPieces["items"] = { 1 }; // its one item is new to the map's game
+            return data;
         });
     palette.loadObjects();
     CHECK(palette.getObjectInfo(0, geck::ObjectCategory::ITEMS) == nullptr);
@@ -103,6 +113,63 @@ TEST_CASE("The object palette shows another game's pieces and goes back to its o
     picker->setCurrentIndex(0);
     CHECK_FALSE(palette.showingOtherGame());
     CHECK(palette.getObjectInfo(0, geck::ObjectCategory::ITEMS) == nullptr);
+}
+
+TEST_CASE("The object palette shows only another game's new pieces until told otherwise", "[qt][othergames]") {
+    QTemporaryDir tmp;
+    REQUIRE(tmp.isValid());
+    const std::filesystem::path base(tmp.path().toStdU16String());
+    const auto other = makeGame(base / "other");
+
+    geck::resource::GameResources own;
+    geck::ObjectPalettePanel palette(own);
+    palette.setOtherGameProviders(
+        [](QString*) { return QList<geck::ObjectPalettePanel::OtherGame>{ { "other", "Other Game" } }; },
+        [&other](const QString&, QString*) -> std::optional<geck::ObjectPalettePanel::OtherGameData> {
+            geck::ObjectPalettePanel::OtherGameData data;
+            data.layers = { other };
+            data.newPieces["items"] = {}; // its one item is a picture the map's game already has
+            return data;
+        });
+    palette.loadObjects();
+    auto* picker = palette.findChild<QComboBox*>("gamePicker");
+    auto* onlyNew = palette.findChild<QCheckBox*>("onlyNewPieces");
+    REQUIRE(picker != nullptr);
+    REQUIRE(onlyNew != nullptr);
+    picker->showPopup();
+    picker->hidePopup();
+    picker->setCurrentIndex(1);
+
+    CHECK(onlyNew->isChecked());
+    CHECK(palette.getObjectInfo(0, geck::ObjectCategory::ITEMS) == nullptr); // left out
+    onlyNew->setChecked(false);
+    const geck::ObjectInfo* info = palette.getObjectInfo(0, geck::ObjectCategory::ITEMS);
+    REQUIRE(info != nullptr);
+    CHECK(info->listIndex == 0);
+    onlyNew->setChecked(true);
+    CHECK(palette.getObjectInfo(0, geck::ObjectCategory::ITEMS) == nullptr);
+}
+
+TEST_CASE("Releasing the other games puts the palette back on its own game", "[qt][othergames]") {
+    QTemporaryDir tmp;
+    REQUIRE(tmp.isValid());
+    const std::filesystem::path base(tmp.path().toStdU16String());
+    const auto other = makeGame(base / "other");
+
+    geck::resource::GameResources own;
+    geck::ObjectPalettePanel palette(own);
+    palette.setOtherGameProviders(
+        [](QString*) { return QList<geck::ObjectPalettePanel::OtherGame>{ { "other", "Other Game" } }; },
+        [&other](const QString&, QString*) -> std::optional<geck::ObjectPalettePanel::OtherGameData> {
+            geck::ObjectPalettePanel::OtherGameData data;
+            data.layers = { other };
+            return data;
+        });
+    palette.loadObjects();
+    auto* picker = palette.findChild<QComboBox*>("gamePicker");
+    REQUIRE(picker != nullptr);
+    picker->showPopup();
+    picker->hidePopup();
 
     picker->setCurrentIndex(1);
     REQUIRE(palette.showingOtherGame());
@@ -110,4 +177,20 @@ TEST_CASE("The object palette shows another game's pieces and goes back to its o
     CHECK_FALSE(palette.showingOtherGame());
     CHECK(picker->currentIndex() == 0);
     CHECK(palette.getObjectInfo(0, geck::ObjectCategory::ITEMS) == nullptr);
+}
+
+TEST_CASE("The Pattern Library lists the stamps that came with gecko under the user's own", "[qt][othergames]") {
+    const QString bundled = geck::pattern::PatternLibrary::bundledDir();
+    if (bundled.isEmpty()) {
+        SKIP("no stamps beside this test program");
+    }
+    geck::resource::GameResources resources;
+    geck::PatternBrowserDialog dialog(resources);
+    auto* tree = dialog.findChild<QTreeView*>("bundledStampsTree");
+    REQUIRE(tree != nullptr);
+    auto* model = qobject_cast<QFileSystemModel*>(tree->model());
+    REQUIRE(model != nullptr);
+    CHECK(QFileInfo(model->filePath(tree->rootIndex())).canonicalFilePath() == bundled);
+    CHECK(model->isReadOnly());
+    CHECK(QDir(bundled).exists("Fallout 2 Stamps"));
 }

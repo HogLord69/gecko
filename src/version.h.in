@@ -16,5 +16,8 @@ namespace geck::version {
     inline constexpr int patch = GECKO_VERSION_PATCH;
     inline constexpr const char* string = GECKO_VERSION_STRING;
     inline constexpr const char* name = GECKO_PROJECT_NAME;
+    // What people see: window titles, the welcome screen, About. `name` stays the program's own name,
+    // because Qt builds the settings and stamps folders from it (%LOCALAPPDATA%\gecko\gecko).
+    inline constexpr const char* displayName = "HogLord Build of Gecko";
     inline constexpr const char* description = GECKO_PROJECT_DESCRIPTION;
 }
