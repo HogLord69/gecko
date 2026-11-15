@@ -2520,9 +2520,29 @@ void MainWindow::updateElevationMenu(Map* map) {
         hasElevation1, hasElevation2, hasElevation3);
 }
 
-void MainWindow::handleMapLoadRequest(const std::string& mapPath, bool forceFilesystem) {
+void MainWindow::handleMapLoadRequest(const std::string& requestedPath, bool forceFilesystem) {
     if (!maybeSaveChanges()) {
         return; // user cancelled — keep the current map instead of loading over it
+    }
+
+    // One copy of each map: when the save folder (the highest-priority data path's maps/)
+    // holds a map of this name, that file is the one opened and saved, whichever copy was
+    // picked (an older copy in another data folder, a recent-files entry, a VFS path).
+    std::string mapPath = requestedPath;
+    if (const auto masterDir = writableMapsDir(); !masterDir.empty()) {
+        std::error_code ec;
+        const std::filesystem::path requested(requestedPath);
+        const std::filesystem::path master = masterDir / requested.filename();
+        if (std::filesystem::is_regular_file(master, ec)) {
+            std::error_code eq;
+            const bool same = std::filesystem::equivalent(requested, master, eq);
+            if (!same) {
+                spdlog::info("Opening {} from the save folder ({}) instead of {}", requested.filename().string(),
+                    master.string(), requestedPath);
+                mapPath = master.string();
+                forceFilesystem = true;
+            }
+        }
     }
     spdlog::debug("MainWindow: Handling request to load map: {} (filesystem: {})", mapPath, forceFilesystem);
 
