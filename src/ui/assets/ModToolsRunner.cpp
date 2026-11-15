@@ -92,6 +92,12 @@ bool ModToolsRunner::isModToolsRoot(const std::filesystem::path& root) {
 
 std::filesystem::path ModToolsRunner::detectRootAboveApplication() {
     std::filesystem::path dir(QCoreApplication::applicationDirPath().toStdU16String());
+    // The release zip puts the map workflow kit beside gecko.exe (gecko/workflow): its tools are
+    // the mod tools of anyone who uses the kit. Only gecko's own folder is checked for one, so a
+    // build inside a mod's project still finds that project's tools further up.
+    if (isModToolsRoot(dir / "workflow")) {
+        return (dir / "workflow").lexically_normal();
+    }
     for (int level = 0; level < 8 && !dir.empty(); ++level) {
         if (isModToolsRoot(dir)) {
             return dir.lexically_normal();

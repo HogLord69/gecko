@@ -128,6 +128,15 @@ Browse another game in gecko, save stamps, and convert them into your mod's id s
 | `repack_art.py` | Move every piece of FOC art that something actually uses below the engine's 4096 art-index cap, swapping unused art up past it. |
 | `fix_art_names.py` | Bring every FOC art filename within the engine's 12-char limit. |
 | `fonline2_source.py` | Make the FOnline 2 client usable as an asset source, like the TC installs, without repeating anything we already have. |
+| `gecko_assets.py` | What gecko's Tools menu runs to make new art: scenery from a picture, mirrored and resized copies, names and examine text, and Apply New Art (close gecko, deploy, reopen it on the same map). |
+| `image_scenery.py` | Turn a picture of an object on a white background (a render or a photo) into a new FOC scenery piece shaded like Fallout 2's own pre-rendered art, with its own art and proto, and optionally a ground shadow object like the Pep G... |
+| `slice_building.py` | Cut a building render into Fallout wall pieces, one per hex, the way the original walls are cut, and its roof into roof tiles, each with its own art (and the walls their own protos), and write a gecko stamp that lays the whole... |
+| `mirror_scenery.py` | Add a left-right mirrored copy of a scenery object as a new FOC piece: its own art and its own proto, the original left as it is. |
+| `scale_scenery.py` | Add a bigger (or smaller) copy of a scenery object as a new FOC piece: its own art and its own proto, the original left as it is. |
+| `scenery_text.py` | Give protos their own name and examine text, from mod/ids/scenery_text.tsv (scenery on the Redwell maps) and mod/ids/proto_text.tsv (items, critters and scenery everywhere else). |
+| `replace_pc_from_ref.py` | Rebuild the PC model (hmpcot/hfpcot) from the restyled green sheets in art/pc_grids/. |
+| `scale_critter.py` | Make a smaller (or bigger) copy of a critter FRM family, every animation and direction, scaled to match another critter's size. |
+| `make_pc_colonist.py` | Pixel-perfect recolor of HMJMPS/HFJMPS matching the user reference: - Light off-white/light-grey crew tee with visible fold shading & highlight - Defined dark-brown belt with silver buckle - Earthy olive/khaki-brown trousers wi... |
 
 ## 7. Register and play
 

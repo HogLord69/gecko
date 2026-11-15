@@ -44,6 +44,7 @@ Fallout 2 is the dense one: its towns carry about 0.2 plants per square of open 
 4. **A road runs through.** The road crosses the play area and carries on off it; buildings front it, a few squares apart, often with a sidewalk strip between building and road.
 5. **Clutter gathers.** Weeds, dead trees, barrels, crates and junk collect around buildings and along the road (about 0.3 objects per square). Open ground beyond stays mostly bare (about 0.05), and about half the floor has nothing on it at all.
 6. **Start near an exit.** The player arrives 10–15 squares inside the edge they came in by, usually on the road.
+7. **Pieces on furniture.** The engine draws a map's objects hex by hex, in ascending hex number, so a stack of books, a tool or a sack set on a table or shelf from the hex behind it is drawn first and the furniture covers it. Gecko draws in file order, so there it looks right. The piece belongs on a hex drawn after the furniture, with its own pixel offset (the map object's x and y, which the engine adds to the hex and keeps on load) taking it back up onto the top. Gecko's right-click **Put on Top** does this for the selected pieces, and `tools/stand_on.py` does it outside the editor (`--scan` lists what the game draws under the furniture it sits on).
 
 ## 3. Checking a map
 
@@ -72,4 +73,5 @@ Fallout 2 is the dense one: its towns carry about 0.2 plants per square of open 
 | `tools/foclib/dat1.py` | Reads Fallout 1's DAT1 archives, so `fo1` is a source like the others. |
 | `tools/map_edges.py` | Writes each map's edge box (`maps/<name>.edg`); underground maps are boxed round everything walkable. |
 | `tools/rock_field.py` | Lays the rock field round an underground map's rooms, under and past its edge box. |
+| `tools/stand_on.py` | Puts pieces set on tables and shelves on a hex the engine draws after them, with a pixel offset, so they show on top in the game. |
 | `tools/restore_map.py` | Puts a set-aside map back into `mod/data/maps`, re-pointing its art by name after any art repack. |

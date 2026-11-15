@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import filecmp
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -201,6 +202,55 @@ def ensure_load_order(base: Path) -> None:
         print(f"mods_order.txt: '{FOC_LAYER}' is now the last (highest priority) entry")
 
 
+def ensure_elevators(base: Path, mod_root: Path) -> None:
+    """
+    Merge FOC's elevators (mod/elevators.ini) into the one elevators file sfall
+    reads (ddraw.ini ElevatorsFile, mods\\elevators.ini, which RPU ships): each FOC
+    section replaces a section of the same number there, the rest stay as they
+    are. Idempotent.
+    """
+    import re as _re
+    src = mod_root / "elevators.ini"
+    if not src.is_file():
+        return
+    dst = base / "mods" / "elevators.ini"
+
+    def sections(text):
+        out, cur = {}, None
+        for line in text.splitlines():
+            m = _re.match(r"\s*\[(\d+)\]\s*$", line)
+            if m:
+                cur = m.group(1)
+                out[cur] = [line]
+            elif cur is not None and not line.lstrip().startswith(";"):
+                out[cur].append(line)
+        return {k: [l for l in v if l.strip()] for k, v in out.items()}
+    ours = sections(src.read_text(encoding="cp1252"))
+    old = dst.read_text(encoding="cp1252", errors="replace") if dst.is_file() else ""
+    theirs = {k: v for k, v in sections(old).items() if k not in ours}
+    merged = {**theirs, **ours}
+    nl = chr(10)
+    new = (nl + nl).join(nl.join(merged[k]) for k in sorted(merged, key=int)) + nl
+    if old != new:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(new, encoding="cp1252")
+        print(f"elevators.ini: FOC's elevator(s) {', '.join(sorted(ours, key=int))} merged in")
+
+
+# A deploy clears and recopies base\mods\foc (and then base-f2ce):
+# under a running game that takes the files away from it mid-read (it crashed
+# the car cutscene, 2026-10-09).
+GAME_EXES = ("fallout2.exe", "fallout2HR.exe", "fallout2-ce.exe")
+
+
+def games_running() -> list[str]:
+    try:
+        out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"], capture_output=True, text=True).stdout.lower()
+    except OSError:
+        return []
+    return [exe for exe in GAME_EXES if f'"{exe.lower()}"' in out]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--clean", action="store_true",
@@ -208,7 +258,13 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--base", type=Path, default=None)
+    ap.add_argument("--while-running", action="store_true",
+                    help="deploy even though the game is running (it may crash)")
     args = ap.parse_args()
+
+    live = games_running()
+    if live and not args.dry_run and not args.while_running:
+        sys.exit(f"{', '.join(live)} is running: close the game first (a deploy replaces the files it is reading)")
 
     gi = GameIndex(args.base)          # pristine: the baseline our IDs sit on
     data = gi.base / "mods" / FOC_LAYER
@@ -324,6 +380,7 @@ def main() -> int:
     # --- make sure sfall actually loads the layer --------------------------
     if not args.dry_run:
         ensure_load_order(gi.base)
+        ensure_elevators(gi.base, ROOT / "mod")
 
     # --- manifest ----------------------------------------------------------
     if not args.dry_run:
@@ -336,7 +393,11 @@ def main() -> int:
         print("--dry-run: nothing was written.")
     else:
         print(f"manifest: mods\\{FOC_LAYER}\\{MANIFEST_NAME}")
-        print(f"\nRun it:  cd /d \"{gi.base}\" && fallout2.exe")
+        # base\mods\foc is the staging area (gecko and the tools read it; the sfall game there is frozen):
+        # the game is FOC's Fallout 2 CE in base-f2ce, which gets the same deploy
+        if (ROOT / "base-f2ce" / ".foc_ce").exists():
+            subprocess.run([sys.executable, str(ROOT / "tools" / "ce_install.py"), "--sync"], check=False)
+            print(f"\nRun it:  {ROOT / 'base-f2ce' / 'PLAY FOC CE (fork).bat'}")
     return 0
 
 

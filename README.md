@@ -22,7 +22,7 @@ The object palette has a **Game** list. Pick another game you have installed and
 
 Drop one on the map and it is brought into your mod first, with new numbers, so it works in your game and shows at once; **Tools > Apply New Art** puts it in the game. Dropping it again uses the same copy. Scenery, walls, misc pieces and items that have no inventory picture (desks, lockers, chests, keys) come across. Critters, weapons, armor, ammo and drugs are refused with the reason: their other numbers (AI packet, talking head, ammo, inventory picture) would point at the wrong things. A piece's script stays behind, since its number means another script in your game.
 
-This needs a mod folder with the mod tools (`tools/gecko_assets.py`, and `tools/sources.json` naming the games and where they are installed), set in **File > Preferences > Mod Tools**.
+It works with the [map workflow](#the-map-workflow) that comes with this build: run `python setup.py` in the `workflow` folder once and give it the folders of the other games you have. gecko finds that folder by itself when it sits beside `gecko.exe`, as it does in the release zip (or set it in **File > Preferences > Mod Tools**).
 
 ### Stamps that come with it
 
@@ -31,6 +31,8 @@ This needs a mod folder with the mod tools (`tools/gecko_assets.py`, and `tools/
 **Edit > Stamp Pattern** lists the stamps that come with this build under your own, as **Came with gecko**: 1,567 buildings, graveyards, junkyards and ruins cut from Fallout 1, Fallout 2, Sonora, Nevada, Resurrection and Olympus, sorted by what they are built from, and **HogLord Props**, 21 props of my own. Nothing has to be copied anywhere. A stamp holds its game's object numbers, not pictures, so use each folder with the game it is named for. The credits are in [`resources/stamps/README.md`](resources/stamps/README.md).
 
 ### New scenery from a picture
+
+The **Tools** menu makes new art for your mod with the [map workflow](#the-map-workflow)'s tools, which gecko finds beside `gecko.exe`.
 
 ![Add Scenery from Picture: a film projector render, previewed beside the player on the hex grid](docs/hoglord/add-scenery.png)
 

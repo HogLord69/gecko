@@ -22,7 +22,14 @@ Per map (elevation 0; its edge box from maps/<name>.edg, tools/map_edges.py):
   * Block Hex Auto Inviso (scenery 0x02000158, the piece Fallout 2 and the TCs line
     their box edges with) on every floored hex of a one-hex band just inside the box
     edge, except where a prefab's own exit grids are: the row is unbroken, as in
-    Fallout 2, and the player gets out by crossing a prefab's inner outline
+    Fallout 2, and the player gets out by crossing a prefab's inner outline; the old
+    edge's blocks go, but one more than KEEP_INSIDE px inside the box was put there by
+    hand and stays
+  * a small exit (KEEP_ENTRANCE hexes or fewer) is an entrance placed by hand (a manhole,
+    a cellar or building door, a gap between buildings) and stays as it is
+  * --side MAP:side puts a map's exits on that side, for a box cut down by hand
+    (map_edges.py --box) that leaves the old exits past a corner; a start hex left
+    outside the box moves to the arrival from the map's first exit
   * arrival: for every exit on another map that leads here, its destination becomes a
     hex ARRIVE_IN px in from this map's exit back the other way (on open floor, two
     hexes clear of exits and blocks), facing into the map; a map entered from the world
@@ -62,6 +69,8 @@ DIRS = {0: (-1, W - 1, W, W + 1, 1, -W), 1: (-W - 1, -1, W, 1, 1 - W, -W)}
 BLOCK_PID = 0x02000158
 EXIT_FIRST, EXIT_LAST = 0x05000010, 0x05000017
 ARRIVE_IN = 220                 # px in from the box edge for an arrival
+KEEP_INSIDE = 64                # an old block this far inside the box is a hand-placed one: kept
+KEEP_ENTRANCE = 8               # an exit of this many hexes or fewer is an entrance: kept as it is
 FACING = {"bottom": 0, "top": 2, "left": 1, "right": 4}
 WORLD_START_MAPS = {"CLAIREMONT.MAP", "LAMESA.MAP"}   # entered from the world map at their start hex
 ROAD = ("road", "curb", "crbm", "line", "stop")
@@ -156,17 +165,18 @@ class Map:
         return out
 
 
-def place_prefab(mp, comp):
-    """Side of the box and the prefab's hexes (tile -> variant pid) for an old patch."""
+def place_prefab(mp, comp, side=None):
+    """Side of the box and the prefab's hexes (tile -> variant pid) for an old patch;
+    side, when given (--side), instead of the one nearest the patch."""
     x0, y0, x1, y1 = mp.box
     pts = [screen(t) for t in comp]
     cx = sum(p[0] for p in pts) / len(pts)
     cy = sum(p[1] for p in pts) / len(pts)
     # nearest side, measured from the patch's centre clamped into the box
     qx, qy = min(max(cx, x0), x1), min(max(cy, y0), y1)
-    side = min((("left", abs(qx - x0) + max(0, x0 - cx)), ("right", abs(x1 - qx) + max(0, cx - x1)),
-                ("top", abs(qy - y0) + max(0, y0 - cy)), ("bottom", abs(y1 - qy) + max(0, cy - y1))),
-               key=lambda kv: kv[1])[0]
+    side = side or min((("left", abs(qx - x0) + max(0, x0 - cx)), ("right", abs(x1 - qx) + max(0, cx - x1)),
+                        ("top", abs(qy - y0) + max(0, y0 - cy)), ("bottom", abs(y1 - qy) + max(0, cy - y1))),
+                       key=lambda kv: kv[1])[0]
     tpl = TEMPLATES[side]
     # where the road crosses that side, near the old patch
     horiz = side in ("top", "bottom")
@@ -192,6 +202,8 @@ def place_prefab(mp, comp):
     anchor = min((t for t in range(W * W) if (t % W) % 2 == 0),
                  key=lambda t: abs(screen(t)[1] - AY) * 4 + abs(screen(t)[0] - AX))
     ax, ay = anchor % W, anchor // W
+    # a piece that would fall off the grid (a box edge at the grid's own edge) is left
+    # out: it lies past the box, where nothing is drawn and nobody can walk
     hexes = {}
     for dx, dy, pid in tpl["objects"]:
         x, y = ax + dx, ay + dy
@@ -271,7 +283,10 @@ def write_map(mp, gi, new_exits, blocks):
     builder = MapBuilder(mp.name, elevations=tuple(mp.m.elevations), map_id=0)
     groups = {0: [], 1: [], 2: []}
     for o in mp.m.objects:
-        if o.elevation == 0 and (EXIT_FIRST <= o.pid <= EXIT_LAST or o.pid == BLOCK_PID):
+        if o.elevation == 0 and EXIT_FIRST <= o.pid <= EXIT_LAST and o.tile not in getattr(mp, "kept_exits", ()):
+            continue
+        # an edge block goes; one well inside the box was placed by hand, and stays
+        if o.elevation == 0 and o.pid == BLOCK_PID and not mp.inside(o.tile, -KEEP_INSIDE):
             continue
         groups[o.elevation].append(mp.raw[o.off:mp.ends[o.off]])
     bp = gi.proto(BLOCK_PID)
@@ -340,7 +355,16 @@ def main() -> int:
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--preview", metavar="DIR")
     g.add_argument("--write", action="store_true")
+    ap.add_argument("--side", action="append", default=[], metavar="MAP:side",
+                    help="put that map's exits on this side of its box (bottom, top, left, right), "
+                         "when a box cut down by hand leaves the old exits past a corner")
     args = ap.parse_args()
+    force_side = {}
+    for s in args.side:
+        n, _, side = s.partition(":")
+        if side not in TEMPLATES:
+            sys.exit(f"--side {s}: the side is one of {', '.join(TEMPLATES)}")
+        force_side[n.upper()] = side
     if args.write:
         running = subprocess.run(["tasklist"], capture_output=True, text=True).stdout.lower()
         if "gecko" in running or "fallout2" in running:
@@ -359,20 +383,42 @@ def main() -> int:
     plan = {}
     for key, mp in maps.items():
         zones = []
-        # pieces of one old exit (same destination, same side, close together) make one prefab
+        # pieces of one old exit (same destination, close together) make one prefab, on
+        # the side of its biggest piece: an exit in a corner of the box has pieces
+        # nearest to two sides, and one exit must not become two
         groups = []
-        for dest, comp in mp.patches():
-            side, _ = place_prefab(mp, comp)
+        mp.kept_exits = set()
+        patches = mp.patches()
+
+        def centre(comp):
+            pts = [screen(t) for t in comp]
+            return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
+
+        for dest, comp in patches:
+            # a small exit on its own is an entrance placed by hand (a manhole, a
+            # cellar door, a building's door, a gap between buildings): it stays as it
+            # is. A small piece next to a bigger patch to the same place is part of
+            # that exit.
+            c = centre(comp)
+            if len(comp) <= KEEP_ENTRANCE and not any(
+                    d2[:2] == dest[:2] and len(c2) > KEEP_ENTRANCE
+                    and abs(centre(c2)[0] - c[0]) + abs(centre(c2)[1] - c[1]) < 700
+                    for d2, c2 in patches):
+                mp.kept_exits |= set(comp)
+                continue
+            side, _ = place_prefab(mp, comp, force_side.get(key))
             pts = [screen(t) for t in comp]
             c = (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
             for gr in groups:
-                if gr["dest"][:2] == list(dest)[:2] and gr["side"] == side and                         abs(gr["c"][0] - c[0]) + abs(gr["c"][1] - c[1]) < 700:
+                if gr["dest"][:2] == list(dest)[:2] and abs(gr["c"][0] - c[0]) + abs(gr["c"][1] - c[1]) < 700:
+                    if len(comp) > gr["biggest"]:
+                        gr["side"], gr["biggest"] = side, len(comp)
                     gr["comp"] += comp
                     break
             else:
-                groups.append({"dest": list(dest), "side": side, "comp": list(comp), "c": c})
+                groups.append({"dest": list(dest), "side": side, "comp": list(comp), "c": c, "biggest": len(comp)})
         for gr in groups:
-            side, hexes = place_prefab(mp, gr["comp"])
+            side, hexes = place_prefab(mp, gr["comp"], force_side.get(key) or gr["side"])
             zones.append({"dest": gr["dest"], "side": side, "hexes": hexes})
         openings = []
         for z in zones:
@@ -384,7 +430,7 @@ def main() -> int:
         all_exit = {t for z in zones for t in z["hexes"]}
         # as in Fallout 2 the row of blocks runs unbroken along the edge; the prefab's own
         # hexes on it are the way out, reached by crossing the prefab's inner outline
-        blocks = block_band(mp, []) - all_exit
+        blocks = block_band(mp, []) - all_exit - mp.kept_exits
         plan[key] = {"zones": zones, "blocks": blocks}
     # 2. arrivals: a zone on map B leading to map A gives the arrival on B for A's exits to B
     arrive = {}                     # (map B, map A id) -> (tile, facing)
@@ -409,6 +455,12 @@ def main() -> int:
                 a = arrive.get((key, dm))
                 if a:
                     new_start[key] = a
+        # a start hex the box has been cut down past goes to the first exit's arrival
+        if (key not in new_start and mp.m.default_elevation == 0 and not mp.inside(mp.m.default_tile)
+                and plan[key]["zones"]):
+            a = arrive.get((key, plan[key]["zones"][0]["dest"][0]))
+            if a:
+                new_start[key] = a
     # 3. checks and output
     results = {}
     debug = {}
@@ -417,9 +469,8 @@ def main() -> int:
         zones, blocks = plan[key]["zones"], plan[key]["blocks"]
         new_exits = {t: (pid, tuple(z["dest"])) for z in zones for t, pid in z["hexes"].items()}
         stops = set(new_exits) | blocks
-        seeds = {mp.m.default_tile} | {a[0] for (b, _), a in arrive.items() if b == key}
-        if key in new_start:
-            seeds.add(new_start[key][0])
+        seeds = {a[0] for (b, _), a in arrive.items() if b == key}
+        seeds.add(new_start[key][0] if key in new_start else mp.m.default_tile)
         mp_blocked = mp.blocked
         mp.blocked = mp_blocked | blocks
         reach = flood(mp, seeds, set(new_exits))
@@ -433,9 +484,12 @@ def main() -> int:
                          + ("" if ok else "   PROBLEM: can't be reached"))
             bad |= not ok
         lines.append(f"   {len(blocks)} block hexes along the box edge (was {len(mp.old_blocks)} on the map)")
+        for (b, dm), (t, f) in sorted(arrive.items()):
+            if b == key:
+                lines.append(f"   arrival from map {dm}: tile {t} ({t % W},{t // W}) facing {f}")
         if key in new_start:
             t, f = new_start[key]
-            lines.append(f"   start hex (world map) -> ({t % W},{t // W}) facing {f}")
+            lines.append(f"   start hex -> ({t % W},{t // W}) facing {f}")
         if outside:
             lines.append(f"   PROBLEM: {len(outside)} hexes outside the box can be walked to, e.g. "
                          + ", ".join(f"({t % W},{t // W})" for t in outside[:5]))

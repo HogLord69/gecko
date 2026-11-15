@@ -76,6 +76,15 @@ def generate() -> str:
     add("#ifndef FOC_IDS_H")
     add("#define FOC_IDS_H")
     add("")
+    # The engine runs procedure 1 for any standard procedure a script lacks
+    # (map_enter_p_proc, critter_p_proc, ...): it has to be start, not a
+    # helper a header defines first (cl_life.h, foc_tools.h, ...), or the
+    # helper runs with no arguments. Procedures are numbered in the order
+    # they first appear, so declare start before any header can.
+    add("/* procedure 1 is start: the engine runs it for a standard procedure")
+    add("   the script doesn't have (tools/gen_ids.py) */")
+    add("procedure start;")
+    add("")
 
     # --- scripts
     entries = read_registry(IDS / "scripts.txt")

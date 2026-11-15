@@ -94,7 +94,29 @@ MMB = dict(
     y_door=dict(pid=0x02000013, frame={-1: "mmb1040", 1: "mmb1041", 2: "mmb1038"}),
 )
 
-WALLSETS = {"dv": DV, "mmb": MMB}
+WARE = dict(
+    # Fallout 2's corrugated metal (New Reno's stables and warehouses, Broken Hills, Redding;
+    # Sonora's PXCOLA). Measured 2026-11-05 (wall_junctions.py ware, wall_sequences.py ware): plain
+    # boxes, four corner pieces and no T or cross pieces, so a building of this set is one room. Runs
+    # repeat ware011 ware010 ware009 ware012 along x and ware006 ware007 ware008 ware005 down y.
+    # A run's free end (an open bay): ware015 ends a run at even x, ware016 starts one at even x.
+    name="ware",
+    junction={(None, G, None, G): "ware001", (G, None, None, G): "ware004",
+              (None, G, G, None): "ware003", (G, None, G, None): "ware002"},
+    plain_x={0: "ware010", 1: "ware011"}, x_extra={0: ["ware012"], 1: ["ware009"]},
+    pairs_x=[], singles_x=[], plain_count_x=611,
+    plain_y={0: "ware006", 1: "ware007"}, y_extra={0: ["ware008"], 1: ["ware005"]},
+    pairs_y=[], plain_count_y=631,
+    y_top_free="ware014", y_bottom_free="ware013", y_top_broken="ware014", y_bottom_broken="ware013",
+    y_door_above="ware020", y_door_below="ware019", y_door_below2="ware019",
+    jamb_hi="ware017", jamb_lo=("ware018", "ware012"),
+    x_end_hi="ware015", x_start_lo="ware016",
+    # the personnel door in an x-run (Fallout 2's corrugated buildings, 5 of them): wareh11 at even
+    # x between ware017 and ware018
+    x_door=dict(pid=0x020001E1, frame={-1: "ware017", 1: "ware018"}),
+)
+
+WALLSETS = {"dv": DV, "mmb": MMB, "ware": WARE}
 
 
 def _transitions(ws):

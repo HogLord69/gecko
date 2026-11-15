@@ -231,6 +231,30 @@ class GameVFS:
     def read_text(self, path: str) -> str:
         return self.read(path).decode("cp1252", "replace")
 
+    def names(self, folder: str = "") -> set[str]:
+        """
+        Every file the game can see under `folder` (e.g. "art\\critters"), from
+        all the layers: lower case, backslashes, relative to the game's root.
+        "" lists everything, which walks every loose folder and takes a while.
+        """
+        want = norm(folder).strip("\\")
+        prefix = want + "\\" if want else ""
+        out: set[str] = set()
+        for prov in self.providers:
+            if prov.kind == "dat":
+                for n in prov.dat.names():
+                    n = norm(n)
+                    if n.startswith(prefix):
+                        out.add(n)
+            else:
+                top = prov.root / want.replace("\\", "/") if want else prov.root
+                if not top.is_dir():
+                    continue
+                for p in top.rglob("*"):
+                    if p.is_file():
+                        out.add(norm(str(p.relative_to(prov.root))))
+        return out
+
     def describe(self) -> str:
         return "\n".join(
             f"  {i:2d}. [{p.kind:5s}] {p.label}" for i, p in enumerate(self.providers)

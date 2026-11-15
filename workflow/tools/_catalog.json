@@ -360,6 +360,42 @@
       {
         "tool": "fonline2_source.py",
         "what": "Make the FOnline 2 client usable as an asset source, like the TC installs, without repeating anything we already have."
+      },
+      {
+        "tool": "gecko_assets.py",
+        "what": "What gecko's Tools menu runs to make new art: scenery from a picture, mirrored and resized copies, names and examine text, and Apply New Art (close gecko, deploy, reopen it on the same map)."
+      },
+      {
+        "tool": "image_scenery.py",
+        "what": "Turn a picture of an object on a white background (a render or a photo) into a new FOC scenery piece shaded like Fallout 2's own pre-rendered art, with its own art and proto, and optionally a ground shadow object like the Pep G..."
+      },
+      {
+        "tool": "slice_building.py",
+        "what": "Cut a building render into Fallout wall pieces, one per hex, the way the original walls are cut, and its roof into roof tiles, each with its own art (and the walls their own protos), and write a gecko stamp that lays the whole..."
+      },
+      {
+        "tool": "mirror_scenery.py",
+        "what": "Add a left-right mirrored copy of a scenery object as a new FOC piece: its own art and its own proto, the original left as it is."
+      },
+      {
+        "tool": "scale_scenery.py",
+        "what": "Add a bigger (or smaller) copy of a scenery object as a new FOC piece: its own art and its own proto, the original left as it is."
+      },
+      {
+        "tool": "scenery_text.py",
+        "what": "Give protos their own name and examine text, from mod/ids/scenery_text.tsv (scenery on the Redwell maps) and mod/ids/proto_text.tsv (items, critters and scenery everywhere else)."
+      },
+      {
+        "tool": "replace_pc_from_ref.py",
+        "what": "Rebuild the PC model (hmpcot/hfpcot) from the restyled green sheets in art/pc_grids/."
+      },
+      {
+        "tool": "scale_critter.py",
+        "what": "Make a smaller (or bigger) copy of a critter FRM family, every animation and direction, scaled to match another critter's size."
+      },
+      {
+        "tool": "make_pc_colonist.py",
+        "what": "Pixel-perfect recolor of HMJMPS/HFJMPS matching the user reference: - Light off-white/light-grey crew tee with visible fold shading & highlight - Defined dark-brown belt with silver buckle - Earthy olive/khaki-brown trousers wi..."
       }
     ]
   },

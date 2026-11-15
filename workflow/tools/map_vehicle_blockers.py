@@ -52,7 +52,7 @@ BLOCKER_PID = cb.BLOCKING_HEX_PID          # scenery 67
 OBJ_ID_OFF, OBJ_TILE_OFF, OBJ_ELEV_OFF = 0x00, 0x04, 0x28
 
 NAME_WORDS = ("car", "truck", "wagon", "cart", "bike", "vehicle", "automobile",
-              "jeep", "bus", "motorcycle", "highwayman", "wreck")
+              "jeep", "bus", "motorcycle", "highwayman", "wreck", "locomotive")
 NAME_NOT = ("cartography", "cargo crate", "carpet", "card", "scarecrow", "bush",
             "carton", "carcass")
 

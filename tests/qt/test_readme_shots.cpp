@@ -19,6 +19,8 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
+#include <QLineEdit>
+#include <QFileInfo>
 #include <QTabWidget>
 #include <QTreeView>
 
@@ -65,6 +67,15 @@ std::shared_ptr<geck::resource::GameResources> gameData() {
 
 std::unique_ptr<geck::ModToolsRunner> runner() {
     return std::make_unique<geck::ModToolsRunner>(std::filesystem::path(env("GECKO_SHOTS_MODTOOLS").toStdU16String()), "python");
+}
+
+// The picture field shows where the picture is on this computer; the README shows its name only.
+void showFileNameOnly(QWidget& dialog, const QString& path) {
+    for (auto* edit : dialog.findChildren<QLineEdit*>()) {
+        if (edit->isReadOnly() && QFileInfo(edit->text()) == QFileInfo(path)) {
+            edit->setText(QFileInfo(path).fileName());
+        }
+    }
 }
 
 int labelsWithPictures(const QWidget& widget) {
@@ -169,6 +180,7 @@ TEST_CASE("README pictures", "[.readme]") {
         dialog.loadPicture(env("GECKO_SHOTS_SCENERY"));
         wait(60000, [&dialog] { return labelsWithPictures(dialog) >= 2; });
         wait(500);
+        showFileNameOnly(dialog, env("GECKO_SHOTS_SCENERY"));
         save(dialog, "add-scenery.png");
     }
 
@@ -183,6 +195,7 @@ TEST_CASE("README pictures", "[.readme]") {
         dialog.loadPicture(env("GECKO_SHOTS_BUILDING"));
         wait(90000, [&dialog] { return labelsWithPictures(dialog) >= 2; });
         wait(500);
+        showFileNameOnly(dialog, env("GECKO_SHOTS_BUILDING"));
         save(dialog, "cut-building.png");
     }
 }

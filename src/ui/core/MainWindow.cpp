@@ -3137,13 +3137,14 @@ void MainWindow::connectOtherGames() {
                 games.push_back({ game.value("id").toString(), game.value("label").toString() });
             }
             if (games.isEmpty()) {
-                *note = "No other games are set up in the mod's tools/sources.json";
+                const QString hint = result.json.value("note").toString();
+                *note = hint.isEmpty() ? QString("No other games are set up in the mod's tools/sources.json") : hint;
             }
             return games;
         },
         [this](const QString& id, QString* error) -> std::optional<ObjectPalettePanel::OtherGameData> {
             showStatusMessage("Reading the other game. The first time, finding the pieces Fallout 2 doesn't "
-                              "have takes a few seconds.");
+                              "have takes a few seconds, up to a minute for a big game.");
             ModToolsRunner runner(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()), _settings->getPythonExecutable());
             const ModToolResult result = runner.runAndWait({ "source", id, "--new" });
             clearStatusMessage();

@@ -14,10 +14,13 @@
     "project": "Fallout 2 (GOG 1.02d) + Restoration Project Unofficial 2.4.33",
     "path": "",
     "credit": "Black Isle / Interplay; RP by killap, RPU maintained by BGforge. killap's source readme asks for a mention in the readme of derived work.",
-    "notes": "This is what base/ was built from. Usually read the base copy instead."
+    "notes": "This is what base/ was built from. Usually read the base copy instead.",
+    "palette": false,
+    "palette_note": "the game FOC is built on: its pieces are already in the palette"
   },
   "fo1": {
     "project": "Fallout (GOG), with the High Resolution Patch",
+    "label": "Fallout 1",
     "path": "",
     "credit": "Interplay / Black Isle. Read for reference (map layout survey); nothing ported.",
     "notes": "MASTER.DAT / CRITTER.DAT are DAT1 archives (foclib/dat1.py). Map version 19."
@@ -38,7 +41,9 @@
     "project": "Olympus 2207 (Full Edition)",
     "path": "",
     "credit": "Olympus 2207 v1.2, Nebesa Games 2010-2015: Artem \"Rainman\" Samoilov (lead design), Alexander \"Saur\" Berezin (lead artist), Sergey \"Zoomer\" Bokarev (dialogue, design), Elena Samoilova; English translation by keyboard gecko (per data/text/english/credits.txt). This Full Edition is Foxx's unofficial build; its license.txt allows personal, non-commercial use only. Ask before a public release.",
-    "notes": "11383 FRMs, 2959 scenery protos - the best art source on this machine."
+    "notes": "11383 FRMs, 2959 scenery protos - the best art source on this machine.",
+    "palette": false,
+    "palette_note": "the owner's rule: no Olympus assets in FOC (its art style clashes)"
   },
   "resurrection": {
     "project": "Fallout: Resurrection (Full Edition), English-patched",
