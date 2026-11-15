@@ -2,6 +2,7 @@
 #include "editor/Hex.h"
 #include "editor/HexGeometry.h"
 #include "editor/Object.h"
+#include "editor/helper/GameDrawOrder.h"
 #include "format/frm/Frm.h"
 #include "format/map/Map.h"
 #include "format/map/MapObject.h"
@@ -358,7 +359,12 @@ void RenderingEngine::renderObjects(sf::RenderTarget& target,
         return;
     }
 
-    for (const auto& object : *renderData.objects) {
+    // In the game's order (editor/helper/GameDrawOrder.h): flat objects first, then the rest, each
+    // hex by hex; the list is in file order, which only decides between objects on one hex. So
+    // what gecko shows stacked is what the game shows. ObjectPicker picks by the same order.
+    const auto& objects = *renderData.objects;
+    for (const std::size_t i : game_draw_order::drawOrder(game_draw_order::drawKeys(objects))) {
+        const auto& object = objects[i];
         // Shared with picking (EditorWidget::getObjectsAtPosition) via isObjectVisible so a
         // hidden object is never drawn nor selectable.
         if (!isObjectVisible(object->getMapObject(), visibility)) {

@@ -565,7 +565,7 @@ namespace {
 
     /// A mod's project folder (it holds tools/gecko_assets.py, the Tools menu's helper) is not game
     /// data. Mounted, it puts the whole project into the game's file system above the real mod
-    /// layer, and FOC's holds file names the ANSI code page cannot map, so it fails to mount.
+    /// layer, and a project can hold file names the ANSI code page cannot map, so it fails to mount.
     /// Says so and returns true when @p picked is one.
     bool refuseModProjectFolder(QWidget* parent, const QString& picked) {
         if (!ModToolsRunner::isModToolsRoot(std::filesystem::path(picked.toStdU16String()))) {

@@ -558,6 +558,8 @@ add_library(gecko_core STATIC
     editor/helper/ObjectQueries.cpp
     editor/helper/ObjectOrder.h
     editor/helper/ObjectOrder.cpp
+    editor/helper/GameDrawOrder.h
+    editor/helper/GameDrawOrder.cpp
     editor/helper/BlackEdge.h
     editor/helper/BlackEdge.cpp
     editor/helper/MapClipboard.h

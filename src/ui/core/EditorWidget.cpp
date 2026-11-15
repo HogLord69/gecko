@@ -50,6 +50,8 @@
 #include <array>
 #include <limits>
 #include <cstdlib>
+#include <exception>
+#include <optional>
 #include <set>
 #include <unordered_map>
 
@@ -64,6 +66,7 @@
 #include "editor/Reachability.h"
 #include "pattern/PatternStamper.h"
 #include "pattern/PatternSprite.h"
+#include "editor/helper/GameDrawOrder.h"
 #include "editor/HexagonGrid.h"
 
 // Area fill commits its plan through PlacementBatch (MapScriptApi is already included above, used by
@@ -1998,16 +2001,43 @@ namespace {
     }
 } // namespace
 
+// Bring to Front / Bring Forward / Send Backward / Send to Back, as the game draws them. gecko draws
+// in the game's order (editor/helper/GameDrawOrder.h): flat objects first, then the rest, each hex
+// by hex, the file order deciding only between objects on one hex. So a step moves the selected
+// object's hex, not its place in the file: it goes to the nearest hex where the game draws it over
+// and under exactly the overlapping objects the step asks for, and its own pixel offset (MapObject
+// x/y, the engine's obj->x/y, added wherever the engine draws or hit-tests the object, kept on load)
+// keeps the picture where it was. Forward hops over the overlapping object drawn next above it,
+// Backward under the one drawn next below; Front and Back go over or under every object it
+// overlaps. Flat objects only stack among flat ones, as in the game.
+//
+// A moved scenery or wall piece becomes picture only (NO_BLOCK, SHOOT_THRU, LIGHT_THRU), and an
+// invisible Block Hex Auto Inviso goes on its old hex with the piece's own blocking flags, so
+// walking, shots and sight there are as before (object.cc _obj_blocking_at, _obj_shoot_blocking_at,
+// _obj_sight_blocking_at). Nothing moves onto a door, stairs, ladder or exit-grid hex. Maps saved
+// before this can be brought into the same order outside the editor, the same way.
 void EditorWidget::reorderSelectedObjects(object_order::Step step) {
     auto* selectionManager = _session.selectionManager();
     if (!_session.map() || !selectionManager) {
         return;
     }
+    constexpr uint32_t kNoBlock = 0x10;
+    constexpr uint32_t kMultihex = 0x800;
+    constexpr uint32_t kLightThru = 0x20000000;
+    constexpr uint32_t kShootThru = 0x80000000;
+    constexpr uint32_t kPictureOnly = kNoBlock | kLightThru | kShootThru;
+    constexpr uint32_t kBlocking = kPictureOnly | kMultihex;
+    constexpr uint32_t kBlockHexPid = 0x02000158; // Block Hex Auto Inviso
+    constexpr int kSearch = 14;
+    constexpr int kWidth = 200;
+    const char* description = reorderDescription(step);
+    const int elevation = _session.currentElevation();
+    const auto& objects = _session.objects(); // this elevation, in file order
 
-    std::vector<std::shared_ptr<MapObject>> selected;
+    std::vector<std::shared_ptr<Object>> selected;
     for (const auto& object : selectionManager->getCurrentSelection().getObjects()) {
         if (object && object->hasMapObject()) {
-            selected.push_back(object->getMapObjectPtr());
+            selected.push_back(object);
         }
     }
     if (selected.empty()) {
@@ -2015,31 +2045,198 @@ void EditorWidget::reorderSelectedObjects(object_order::Step step) {
         return;
     }
 
-    // Only objects drawn right now can be hopped over: moving past a hidden one changes nothing
-    // you can see, so Forward/Backward would look like it did nothing.
-    std::unordered_map<const MapObject*, const sf::Sprite*> drawn;
-    for (const auto& object : _session.objects()) {
-        if (object && object->hasMapObject() && isObjectVisible(object->getMapObject(), _session.visibility())) {
-            drawn.emplace(object->getMapObjectPtr().get(), &object->getSprite());
+    // Only objects drawn right now count: going over or under a hidden one changes nothing you see.
+    auto keys = game_draw_order::drawKeys(objects);
+    std::vector<std::size_t> drawn;
+    std::unordered_map<const Object*, std::size_t> indexOf;
+    std::set<int> passages; // door, stairs, ladder and exit-grid hexes: nothing moves onto them
+    for (std::size_t i = 0; i < objects.size(); ++i) {
+        const auto& object = objects[i];
+        if (!object || !object->hasMapObject()) {
+            continue;
+        }
+        indexOf.emplace(object.get(), i);
+        const auto& o = object->getMapObject();
+        if (isObjectVisible(o, _session.visibility())) {
+            drawn.push_back(i);
+        }
+        if (o.objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::MISC)) {
+            passages.insert(static_cast<int>(o.position));
+        } else if (o.objectType() == static_cast<uint32_t>(Pro::OBJECT_TYPE::SCENERY)) {
+            try {
+                if (const Pro* pro = _resources.loadPro(o.pro_pid); pro != nullptr) {
+                    const auto type = static_cast<Pro::SCENERY_TYPE>(pro->objectSubtypeId());
+                    if (type == Pro::SCENERY_TYPE::DOOR || type == Pro::SCENERY_TYPE::STAIRS
+                        || type == Pro::SCENERY_TYPE::LADDER_BOTTOM || type == Pro::SCENERY_TYPE::LADDER_TOP) {
+                        passages.insert(static_cast<int>(o.position));
+                    }
+                }
+            } catch (const std::exception&) { // a proto that won't load isn't a passage
+            }
         }
     }
     std::unordered_map<const sf::Texture*, sf::Image> images;
-    const auto overlaps = [&drawn, &images](const MapObject& a, const MapObject& b) {
-        const auto spriteA = drawn.find(&a);
-        const auto spriteB = drawn.find(&b);
-        return spriteA != drawn.end() && spriteB != drawn.end()
-            && spritesOverlap(*spriteA->second, *spriteB->second, images);
-    };
 
-    const int elevation = _session.currentElevation();
-    const auto before = getMapFile().map_objects[elevation];
-    const auto after = object_order::reordered(before, selected, step, overlaps);
-    const char* description = reorderDescription(step);
-    if (!_controller.commandController().registerObjectReorder(elevation, before, after, description)) {
-        Q_EMIT statusMessageRequested(QString("%1: already there").arg(description));
+    std::vector<std::shared_ptr<Object>> moved;
+    std::vector<ObjectSpotState> before;
+    std::vector<ObjectSpotState> after;
+    std::vector<std::pair<int, uint32_t>> standIns; // (old hex, the moved piece's own flags)
+    int already = 0;
+    int noHex = 0;
+    for (const auto& object : selected) {
+        const auto found = indexOf.find(object.get());
+        if (found == indexOf.end()) {
+            continue;
+        }
+        const std::size_t si = found->second;
+        auto& o = object->getMapObject();
+
+        // the objects it overlaps that the game stacks it with, and whether it is drawn over each now
+        std::vector<std::size_t> others;
+        std::vector<bool> overNow;
+        for (const std::size_t i : drawn) {
+            if (i != si && keys[i].flat == keys[si].flat
+                && spritesOverlap(object->getSprite(), objects[i]->getSprite(), images)) {
+                others.push_back(i);
+                overNow.push_back(game_draw_order::drawnBefore(keys[i], i, keys[si], si));
+            }
+        }
+        // whether it should be drawn over each after the step
+        std::vector<bool> over = overNow;
+        std::optional<std::size_t> hop;
+        const auto drawnEarlier = [&keys](std::size_t a, std::size_t b) {
+            return game_draw_order::drawnBefore(keys[a], a, keys[b], b);
+        };
+        for (std::size_t k = 0; k < others.size(); ++k) {
+            switch (step) {
+                case object_order::Step::BringToFront:
+                    over[k] = true;
+                    break;
+                case object_order::Step::SendToBack:
+                    over[k] = false;
+                    break;
+                case object_order::Step::BringForward: // the lowest of those drawn over it
+                    if (!overNow[k] && (!hop || drawnEarlier(others[k], others[*hop]))) {
+                        hop = k;
+                    }
+                    break;
+                case object_order::Step::SendBackward: // the highest of those drawn under it
+                    if (overNow[k] && (!hop || drawnEarlier(others[*hop], others[k]))) {
+                        hop = k;
+                    }
+                    break;
+            }
+        }
+        if (hop) {
+            over[*hop] = step == object_order::Step::BringForward;
+        }
+        if (over == overNow) {
+            ++already;
+            continue;
+        }
+
+        // the nearest hex where the game draws it over and under exactly those
+        const auto ok = [&](int hex) {
+            const game_draw_order::DrawKey at{ hex, keys[si].flat };
+            for (std::size_t k = 0; k < others.size(); ++k) {
+                if (game_draw_order::drawnBefore(keys[others[k]], others[k], at, si) != over[k]) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        const auto here = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(o.position));
+        if (!here.has_value()) {
+            ++noHex;
+            continue;
+        }
+        const int hx = here->get().x();
+        const int hy = here->get().y();
+        const int ax = static_cast<int>(o.position) % kWidth;
+        const int ay = static_cast<int>(o.position) / kWidth;
+        int pick = -1;
+        int best = 0;
+        for (int y = ay - kSearch; y <= ay + kSearch; ++y) {
+            for (int x = ax - kSearch; x <= ax + kSearch; ++x) {
+                const int hex = y * kWidth + x;
+                if (x < 0 || y < 0 || x >= kWidth || y >= kWidth || passages.contains(hex) || !ok(hex)) {
+                    continue;
+                }
+                if (auto h = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(hex)); h.has_value()) {
+                    const int distance = std::abs(h->get().x() - hx) + std::abs(h->get().y() - hy);
+                    if (pick < 0 || distance < best) {
+                        pick = hex;
+                        best = distance;
+                    }
+                }
+            }
+        }
+        if (pick < 0) {
+            ++noHex;
+            continue;
+        }
+        const auto target = _session.hexgrid().getHexByPosition(static_cast<uint32_t>(pick));
+        ObjectSpotState from{ static_cast<int>(o.position), o.x, o.y, o.flags };
+        ObjectSpotState to = from;
+        to.position = pick;
+        to.x = static_cast<uint32_t>(static_cast<int32_t>(o.x) + hx - target->get().x());
+        to.y = static_cast<uint32_t>(static_cast<int32_t>(o.y) + hy - target->get().y());
+        const uint32_t type = o.objectType();
+        if (type == static_cast<uint32_t>(Pro::OBJECT_TYPE::SCENERY) || type == static_cast<uint32_t>(Pro::OBJECT_TYPE::WALL)) {
+            if ((o.flags & kPictureOnly) != kPictureOnly || (o.flags & kMultihex) != 0) {
+                standIns.emplace_back(static_cast<int>(o.position), o.flags);
+            }
+            to.flags = (o.flags | kPictureOnly) & ~kMultihex;
+        }
+        keys[si].hex = pick; // the next selected object sees it where it now is
+        moved.push_back(object);
+        before.push_back(from);
+        after.push_back(to);
+    }
+    if (moved.empty()) {
+        Q_EMIT statusMessageRequested(noHex
+                ? QString("%1: no hex near it draws it that way in the game").arg(description)
+                : QString("%1: already there").arg(description));
         return;
     }
-    Q_EMIT statusMessageRequested(QString("%1: %2 object(s)").arg(description).arg(selected.size()));
+
+    ScopedUndoBatch batch(_controller.commandController(), description);
+    _controller.commandController().registerObjectSpotEdit(moved, before, after, description);
+    uint32_t blockFid = 0;
+    uint32_t blockFlags = 0;
+    try {
+        if (const Pro* pro = _resources.loadPro(kBlockHexPid); pro != nullptr) {
+            blockFid = static_cast<uint32_t>(pro->header.FID);
+            blockFlags = pro->header.flags;
+        }
+    } catch (const std::exception&) {
+    }
+    int placed = 0;
+    for (const auto& [hex, flags] : standIns) {
+        if (blockFid == 0) {
+            break;
+        }
+        auto stand = std::make_shared<MapObject>();
+        stand->position = hex;
+        stand->elevation = static_cast<uint32_t>(elevation);
+        stand->pro_pid = kBlockHexPid;
+        stand->frm_pid = blockFid;
+        stand->flags = (blockFlags & ~kBlocking) | (flags & kBlocking);
+        auto sprite = pattern::buildSpriteObject(_resources, _session.hexgrid(), blockFid, hex, 0);
+        if (!sprite) {
+            continue;
+        }
+        sprite->setMapObject(stand);
+        if (_controller.commandController().registerObjectPlacement(stand, sprite)) {
+            ++placed;
+        }
+    }
+    if (placed < static_cast<int>(standIns.size())) {
+        spdlog::warn("{}: {} of {} invisible blocks placed", description, placed, standIns.size());
+    }
+    Q_EMIT statusMessageRequested(QString("%1: %2 object(s)%3%4").arg(description).arg(moved.size())
+            .arg(placed ? QString(", %1 invisible block(s) keep their old hexes as they were").arg(placed) : QString())
+            .arg(noHex ? QString(", %1 with no hex that does it").arg(noHex) : QString()));
 }
 
 // "Put on Top". The engine draws an elevation's objects hex by hex in ascending hex number
@@ -2052,8 +2249,8 @@ void EditorWidget::reorderSelectedObjects(object_order::Step step) {
 // floor) within kReach px; failing that it keeps the nearest hex and stops blocking, as the
 // furniture under it blocks. An item keeps an open hex beside it to be picked up from. A piece
 // sits on another when it is less than half its size and its foot (the bottom middle of its
-// picture) is on the other's opaque pixels, above the other's own foot. The same rule as
-// FOCMod's tools/stand_on.py, which fixes maps outside the editor.
+// picture) is on the other's opaque pixels, above the other's own foot. The same rule can fix
+// maps outside the editor.
 void EditorWidget::putSelectedOnTop() {
     auto* selectionManager = _session.selectionManager();
     if (!_session.map() || !selectionManager) {
