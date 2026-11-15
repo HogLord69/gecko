@@ -832,7 +832,8 @@ def build_overlay() -> list[str]:
         dst.write_bytes(data)
         written.append(game_path)
 
-    gi = GameIndex()                     # pristine, as deploy.py builds the lists
+    from port import base_index
+    gi = base_index()                    # pristine, as deploy.py builds the lists
     for t, key in PROTO_KEY.items():
         if read_registry(lists.IDS / f"{key}.txt"):
             name = TYPE_NAME[t]
@@ -879,14 +880,22 @@ def cmd_stamp_games(_args) -> dict:
 
 
 def mod_data_files() -> dict[str, tuple[int, int]]:
+    """game path -> (size, time) of every file in mod/data, from the directory listings alone."""
     from port import MOD
-    data = MOD / "data"
     out = {}
-    for root, _dirs, files in os.walk(data):
-        for f in files:
-            p = Path(root) / f
-            st = p.stat()
-            out[p.relative_to(data).as_posix()] = (st.st_size, st.st_mtime_ns)
+    folders = [(str(MOD / "data"), "")]
+    while folders:
+        folder, rel = folders.pop()
+        try:
+            with os.scandir(folder) as it:
+                for e in it:
+                    if e.is_dir():
+                        folders.append((e.path, f"{rel}{e.name}/"))
+                    elif e.is_file():
+                        st = e.stat()
+                        out[rel + e.name] = (st.st_size, st.st_mtime_ns)
+        except FileNotFoundError:
+            continue
     return out
 
 

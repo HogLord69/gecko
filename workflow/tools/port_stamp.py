@@ -61,6 +61,11 @@ converted one written under the original name, tagged with a "focConverted"
 block (gecko ignores unknown keys). Ported art lands at the end of the art
 lists, above the engine's 4096 cap - run tools/repack_art.py afterwards to move
 everything a map or stamp uses below it.
+
+What the FOC view learns from each file (an art file's sha1, a proto's FID and
+flags) is kept in build/stamp_port/foc_view.json and read again only for files
+whose size or time changed (FileFacts): reading all of mod/data on every run
+made each stamp gecko converted take over a minute.
 """
 
 from __future__ import annotations
@@ -126,19 +131,114 @@ def art_file(art_dir: str, entry: str) -> str:
 
 # ------------------------------------------------------------------ FOC view
 
+def base_signature(gi: GameIndex) -> list:
+    """What the base's files depend on: every archive's size and time, and every loose layer's
+    file count, total size and newest time."""
+    sig = []
+    for prov in gi.vfs.providers:
+        if prov.kind == "dir":
+            n = size = newest = 0
+            for r, _d, fs in os.walk(prov.root):
+                for f in fs:
+                    try:
+                        st = os.stat(os.path.join(r, f))
+                    except OSError:
+                        continue
+                    n, size, newest = n + 1, size + st.st_size, max(newest, st.st_mtime_ns)
+            sig.append([prov.label, n, size, newest])
+        else:
+            try:
+                st = prov.dat.path.stat()
+                sig.append([prov.label, st.st_size, st.st_mtime_ns])
+            except OSError:
+                sig.append([prov.label])
+    return sig
+
+
+class FileFacts:
+    """What the FOC view learns from each file it reads (an art file's sha1, a proto's FID and
+    flags), kept between runs in REPORT_DIR/foc_view.json so a run opens only the files that changed
+    since the last one. Opening each of the mod's ~20,000 loose art and proto files took over a
+    minute on Windows, for a stamp whose pieces the mod already had. A file in mod/data is known by
+    its size and time; the base's files are known while its archives are unchanged."""
+
+    VERSION = 1
+
+    def __init__(self, gi: GameIndex):
+        self.path = REPORT_DIR / "foc_view.json"
+        self.sig = json.loads(json.dumps([self.VERSION, str(MOD_DATA), base_signature(gi)]))
+        self.local: dict[str, list] = {}
+        self.base: dict[str, object] = {}
+        self.dirty = False
+        try:
+            got = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            got = {}
+        old = got.get("sig") or [None, None, None]
+        if old[:2] == self.sig[:2]:
+            self.local = got.get("local") or {}     # checked file by file, so a base change keeps them
+            if old == self.sig:
+                self.base = got.get("base") or {}
+
+    def get(self, key: str, stat: tuple[int, int] | None) -> tuple[bool, object]:
+        if stat is None:
+            return (True, self.base[key]) if key in self.base else (False, None)
+        hit = self.local.get(key)
+        if hit is not None and hit[0] == stat[0] and hit[1] == stat[1]:
+            return True, hit[2]
+        return False, None
+
+    def put(self, key: str, stat: tuple[int, int] | None, fact) -> None:
+        if stat is None:
+            self.base[key] = fact
+        else:
+            self.local[key] = [stat[0], stat[1], fact]
+        self.dirty = True
+
+    def save(self) -> None:
+        if not self.dirty:
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_name(f"{self.path.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps({"sig": self.sig, "local": self.local, "base": self.base},
+                                  separators=(",", ":")), encoding="utf-8")
+        try:
+            os.replace(tmp, self.path)
+        except OSError:                     # another run is saving it: theirs will do
+            tmp.unlink(missing_ok=True)
+            return
+        self.dirty = False
+
+
+def _art_sha(b: bytes | None) -> str | None:
+    return sha(b) if b is not None else None
+
+
+def _proto_summary(b: bytes | None) -> list[int] | None:
+    """[fid, flags] of a proto, or None when there is none or it can't be read."""
+    if not b:
+        return None
+    try:
+        p = parse_pro(b)
+    except ValueError:
+        return None
+    return [p.fid, p.flags]
+
+
 class Foc:
     """FOC as the next deploy will ship it: base plus mod/ids + mod/data,
     read straight from the authored tree so freshly ported protos and art are
     visible before deploy.py has run."""
 
     def __init__(self):
-        self.gi = GameIndex()               # pristine base
+        self.gi = port.base_index()         # pristine base
         self._art: dict[str, list[str]] = {}
-        self._local: dict[str, dict[str, Path]] = {}
+        self._local: dict[str, dict[str, tuple[Path, int, int]]] = {}
         self._hash: dict[str, dict[str, int]] = {}
         self._protos_by_art: dict[int, dict[int, list[int]]] = {}
         self._proto_lsts: dict[int, list[str]] = {}
         self.palette = load_palette(self.gi)
+        self.facts = FileFacts(self.gi)
 
     def reset(self):
         """Forget everything derived from mod/ids - call after porting."""
@@ -154,21 +254,39 @@ class Foc:
             self._art[d] = [n.lower() for n in lists.art_lst(self.gi, d)]
         return self._art[d]
 
-    def _local_files(self, sub: str) -> dict[str, Path]:
+    def _local_files(self, sub: str) -> dict[str, tuple[Path, int, int]]:
+        """name -> (path, size, time) of the mod's own files in one folder (one directory read)."""
         if sub not in self._local:
             p = MOD_DATA / sub
-            self._local[sub] = ({q.name.lower(): q for q in p.iterdir()}
-                                if p.is_dir() else {})
+            out: dict[str, tuple[Path, int, int]] = {}
+            if p.is_dir():
+                with os.scandir(p) as it:
+                    for e in it:
+                        if e.is_file():
+                            st = e.stat()
+                            out[e.name.lower()] = (Path(e.path), st.st_size, st.st_mtime_ns)
+            self._local[sub] = out
         return self._local[sub]
 
     def read(self, sub: str, name: str) -> bytes | None:
         q = self._local_files(sub).get(name.lower())
         if q is not None:
-            return q.read_bytes()
+            return q[0].read_bytes()
         try:
             return self.gi.vfs.read(f"{sub.replace('/', chr(92))}\\{name}")
         except FileNotFoundError:
             return None
+
+    def fact(self, sub: str, name: str, learn):
+        """learn(the file's bytes, or None) for one file, remembered between runs (FileFacts)."""
+        q = self._local_files(sub).get(name.lower())
+        stat = (q[1], q[2]) if q is not None else None
+        key = f"{sub}/{name.lower()}"
+        known, out = self.facts.get(key, stat)
+        if not known:
+            out = learn(self.read(sub, name))
+            self.facts.put(key, stat, out)
+        return out
 
     def art_bytes(self, d: str, idx: int) -> bytes | None:
         lst = self.art_list(d)
@@ -176,16 +294,23 @@ class Foc:
             return None
         return self.read(f"art/{d}", art_file(d, lst[idx]))
 
+    def art_sha(self, d: str, idx: int) -> str | None:
+        lst = self.art_list(d)
+        if not (0 <= idx < len(lst)) or not lst[idx]:
+            return None
+        return self.fact(f"art/{d}", art_file(d, lst[idx]), _art_sha)
+
     def art_hash_index(self, d: str) -> dict[str, int]:
         """sha1(art bytes) -> first index drawing it (first wins: tiles.lst
         repeats 22 names, CLAUDE.md 4f)."""
         if d not in self._hash:
             out: dict[str, int] = {}
             for i in range(len(self.art_list(d))):
-                b = self.art_bytes(d, i)
-                if b is not None:
-                    out.setdefault(sha(b), i)
+                h = self.art_sha(d, i)
+                if h is not None:
+                    out.setdefault(h, i)
             self._hash[d] = out
+            self.facts.save()
         return self._hash[d]
 
     def proto_lst(self, t: int) -> list[str]:
@@ -210,6 +335,17 @@ class Foc:
         except ValueError:
             return None
 
+    def proto_fid_flags(self, pid: int) -> list[int] | None:
+        """[fid, flags] of a FOC proto, without reading it again once known (FileFacts)."""
+        t = pid_type(pid)
+        if t not in TYPE_NAME:
+            return None
+        lst = self.proto_lst(t)
+        i = pid_index(pid) - 1
+        if not (0 <= i < len(lst)) or not lst[i]:
+            return None
+        return self.fact(f"proto/{TYPE_NAME[t]}", lst[i], _proto_summary)
+
     def protos_by_art(self, t: int) -> dict[int, list[int]]:
         """art index -> FOC pids of type t whose proto draws it, base first."""
         if t not in self._protos_by_art:
@@ -217,10 +353,11 @@ class Foc:
             out: dict[int, list[int]] = {}
             for i in range(1, len(self.proto_lst(t)) + 1):
                 pid = (t << 24) | i
-                p = self.proto(pid)
-                if p is not None and ((p.fid >> 24) & 0xF) == t:
-                    out.setdefault(p.fid & art_mask(d), []).append(pid)
+                s = self.proto_fid_flags(pid)
+                if s is not None and ((s[0] >> 24) & 0xF) == t:
+                    out.setdefault(s[0] & art_mask(d), []).append(pid)
             self._protos_by_art[t] = out
+            self.facts.save()
         return self._protos_by_art[t]
 
 
@@ -394,6 +531,7 @@ class Converter:
         self.exact_tiles = 0
         self.ported_tiles = 0
         self._spare: list[int] | None = None
+        self._ledger: dict[tuple[str, str], str] | None = None
         self.notes: list[str] = []
 
     # -- source helpers
@@ -416,16 +554,21 @@ class Converter:
             return f, None
 
     def ledger(self, kind: str, source_id: str) -> str | None:
-        for r in port.read_ledger():
-            if r["source"] == self.source and r["kind"] == kind and r["source_id"].lower() == source_id.lower():
-                return r["dest_id"]
-        return None
+        """The first ledger row's dest_id for this source's thing (the ledger is read once, and
+        again after a port adds to it)."""
+        if self._ledger is None:
+            self._ledger = {}
+            for r in port.read_ledger():
+                if r["source"] == self.source:
+                    self._ledger.setdefault((r["kind"], r["source_id"].lower()), r["dest_id"])
+        return self._ledger.get((kind, source_id.lower()))
 
     def _quiet(self, fn, args):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             fn(args)
         self.foc.reset()
+        self._ledger = None
         return buf.getvalue()
 
     # -- objects
@@ -476,7 +619,7 @@ class Converter:
                 cands = self.foc.protos_by_art(t).get(idx, [])
                 # same flags first (flat/no-block/light matter to how it sits),
                 # then the lowest pid (base before ported)
-                cands = sorted(cands, key=lambda c: (self.foc.proto(c).flags != sp.flags, c))
+                cands = sorted(cands, key=lambda c: (self.foc.proto_fid_flags(c)[1] != sp.flags, c))
                 if cands:
                     self.stats["artmatch"] += 1
                     return cands[0]

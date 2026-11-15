@@ -630,9 +630,12 @@ def check_questlog(gi, rep):
 
 def check_dialogue(rep):
     """Speakers who open too many lines with a stage direction, or run long (docs/DIALOGUE_GUIDE.md)."""
-    import dialogue_check
-
     rep.section("10 dialogue")
+    try:
+        import dialogue_check
+    except ImportError:
+        rep.ok("no dialogue tools: dialogue checks skipped (a maps-only mod)")
+        return
     over = dialogue_check.flagged()
     if over:
         rep.warn(f"dialogue: {len(over)} speaker(s) over the limits of docs/DIALOGUE_GUIDE.md "
