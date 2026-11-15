@@ -1,6 +1,6 @@
 # Site Plans
 
-Every FOC map is planned on paper before anything is placed: a to-scale drawing in the game's own projection, built from a real place and from how the original games and the total conversions lay out the same kind of place. The map is then built from the plan's data, and checked against it.
+Every mod map is planned on paper before anything is placed: a to-scale drawing in the game's own projection, built from a real place and from how the original games and the total conversions lay out the same kind of place. The map is then built from the plan's data, and checked against it.
 
 ## How a plan is made
 

@@ -11,7 +11,7 @@ A proto's name is message <id> and its examine text <id>+1 in its type's
 pro_*.msg (proto.cc protoGetMessage). Vanilla protos share ids ("Plant" / "A
 mutated cornstalk." covers every corn stalk AND the marijuana bushes), so
 changing a vanilla line in place would change unrelated objects. Instead each
-listed proto is pointed at an FOC entry: its name is allocated in
+listed proto is pointed at a mod entry: its name is allocated in
 mod/ids/msg_<type>.txt (idempotent by name), its description is set for that
 name in msg_<type>_desc.txt (replacing any earlier one), and the proto's
 message id at offset 4 is rewritten. A vanilla-range proto gets a foc-layer

@@ -104,7 +104,7 @@ def main() -> int:
                     help="label every location \"Unknown\", as the game does "
                          "before an area has been visited")
     ap.add_argument("--include-hidden", action="store_true",
-                    help="also draw FOC areas that start hidden (e.g. the "
+                    help="also draw mod areas that start hidden (e.g. the "
                          "Ruins, revealed by a quest); base areas stay hidden")
     args = ap.parse_args()
 

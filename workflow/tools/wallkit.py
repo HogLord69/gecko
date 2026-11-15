@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 wallkit.py - learn how the original games and the total conversions build
-walls, so FOC's maps can draw their own buildings instead of copying them.
+walls, so the mod's maps can draw their own buildings instead of copying them.
 
     python tools/wallkit.py learn                  # every source but Olympus
     python tools/wallkit.py show nec               # what was learned for a family
@@ -19,7 +19,7 @@ door piece and the wall family on both sides of it.
 The result, build/wallkit/kit.json, maps family -> signature -> pieces
 (source, source pid, art, count). draw() in this module places a family's
 pieces round any outline, choosing among the pieces seen with each signature
-by their counts, and converts source pids to FOC pids with
+by their counts, and converts source pids to mod pids with
 port_stamp.Converter, as compose_map.py's lift does.
 
 Olympus is never learned from: its assets are the owner's only.

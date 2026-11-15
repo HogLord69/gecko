@@ -18,13 +18,13 @@ The base is OUR copy, built by tools/make-base.ps1. The original install under
 The install you copied it from is never touched by anything in this project.
 
 What gets written:
-  * generated scripts.lst   base entries + filler + FOC entries
+  * generated scripts.lst   base entries + filler + mod entries
   * generated vault13.gam   same scheme, slot-for-slot
   * generated proto .lst    per type, only when the mod allocates that type
-  * generated data\\maps.txt     base maps + filler + FOC map sections
-  * generated data\\city.txt     base areas + FOC area sections
-  * generated map.msg            base + FOC map/elevation/area names
-  * generated data\\quests.txt   FOC's Pip-Boy quest log (tools/questlog.py)
+  * generated data\\maps.txt     base maps + filler + mod map sections
+  * generated data\\city.txt     base areas + mod area sections
+  * generated map.msg            base + mod map/elevation/area names
+  * generated data\\quests.txt   the mod's Pip-Boy quest log (tools/questlog.py)
   * build\\scripts\\*.int     the compiled scripts
   * mod\\data\\**             maps, .msg, .pro, art, sound - copied verbatim
 
@@ -204,8 +204,8 @@ def ensure_load_order(base: Path) -> None:
 
 def ensure_elevators(base: Path, mod_root: Path) -> None:
     """
-    Merge FOC's elevators (mod/elevators.ini) into the one elevators file sfall
-    reads (ddraw.ini ElevatorsFile, mods\\elevators.ini, which RPU ships): each FOC
+    Merge the mod's elevators (mod/elevators.ini) into the one elevators file sfall
+    reads (ddraw.ini ElevatorsFile, mods\\elevators.ini, which RPU ships): each mod
     section replaces a section of the same number there, the rest stay as they
     are. Idempotent.
     """
@@ -234,7 +234,7 @@ def ensure_elevators(base: Path, mod_root: Path) -> None:
     if old != new:
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_text(new, encoding="cp1252")
-        print(f"elevators.ini: FOC's elevator(s) {', '.join(sorted(ours, key=int))} merged in")
+        print(f"elevators.ini: the mod's elevator(s) {', '.join(sorted(ours, key=int))} merged in")
 
 
 # A deploy clears and recopies base\mods\foc (and then base-f2ce):
@@ -306,7 +306,7 @@ def main() -> int:
                               lists.render_lst(lists.art_lst(gi, art_dir)))
     except lists.Overflow as e:
         print(f"ERROR: {e}")
-        print("       the base has grown past a FOC start; run tools/ids.py")
+        print("       the base has grown past a mod start; run tools/ids.py")
         return 1
 
     # --- generated worldmap registration -----------------------------------
@@ -331,7 +331,7 @@ def main() -> int:
         return 1
 
     # --- generated Pip-Boy quest log -----------------------------------------
-    # FOC's entries only (the base's are vanilla quests); the text is
+    # the mod's entries only (the base's are vanilla quests); the text is
     # mod\data\text\english\game\quests.msg, copied below with the rest.
     try:
         quests_txt, problems = questlog.build(gi)
@@ -397,10 +397,10 @@ def main() -> int:
     else:
         print(f"manifest: mods\\{FOC_LAYER}\\{MANIFEST_NAME}")
         # base\mods\foc is the staging area (gecko and the tools read it; the sfall game there is frozen):
-        # the game is FOC's Fallout 2 CE in base-f2ce, which gets the same deploy
+        # the game is the mod's Fallout 2 CE in base-f2ce, which gets the same deploy
         if (ROOT / "base-f2ce" / ".foc_ce").exists():
             subprocess.run([sys.executable, str(ROOT / "tools" / "ce_install.py"), "--sync"], check=False)
-            print(f"\nRun it:  {ROOT / 'base-f2ce' / 'PLAY FOC CE (fork).bat'}")
+            print(f"\nRun it:  {ROOT / 'base-f2ce' / 'PLAY the mod CE (fork).bat'}")
     return 0
 
 

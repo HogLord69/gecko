@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-open_tiles.py - list open floor hexes in a hex rectangle of a FOC map: no
+open_tiles.py - list open floor hexes in a hex rectangle of a map: no
 blocking object, no exit grid within 2 hexes, reachable on foot from the
 map's start, at least --spacing hexes apart. For placing spawns.
 

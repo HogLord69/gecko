@@ -10,10 +10,10 @@ allocated, or reads a GVAR slot occupied by something else - all of which fail
 silently or bizarrely at runtime, hours later, in a save you cannot debug.
 
 Checks:
-  1  ID space          base has not grown into a FOC range
+  1  ID space          base has not grown into a mod range
   2  generated header  foc_ids.h matches mod/ids/*.txt
   3  scripts           scripts.h defines still match scripts.lst line numbers,
-                       and every FOC script has a built .int
+                       and every mod script has a built .int
   4  protos            every .lst entry resolves to a real .pro
   5  GVARs             every GVAR_ referenced resolves, no duplicate names,
                        no define pointing at the wrong slot
@@ -131,7 +131,7 @@ def check_id_space(gi, rep):
     for p in problems:
         rep.err(p)
     if not problems:
-        rep.ok("base fits below every FOC start")
+        rep.ok("base fits below every mod start")
 
 
 def check_generated_header(rep):
@@ -178,7 +178,7 @@ def check_scripts(gi, rep):
         rep.ok(f"{len(defs)} SCRIPT_* defines checked against scripts.lst, "
                f"{bad} problem(s)")
 
-    # 3b. every FOC script registered must have a compiled .int
+    # 3b. every mod script registered must have a compiled .int
     foc = gen_ids.read_registry(MOD / "ids" / "scripts.txt")
     for i, name in enumerate(foc):
         if not name:
@@ -238,7 +238,7 @@ def check_art(gi, rep):
     Split by range on purpose. RPU 2.4.33 ships 46 dangling entries in its own
     art/scenery.lst; those are pre-existing and only ever a warning, because an
     error we cannot fix is an error we learn to ignore - and then it hides ours.
-    Anything at or above the FOC start IS ours, and is an error.
+    Anything at or above the mod's start IS ours, and is an error.
     """
     rep.section("4b art")
     from ids import ART_KEY
@@ -300,7 +300,7 @@ def check_art(gi, rep):
                 continue
             if line >= start:
                 foc_missing += 1
-                rep.err(f"art/{art_dir}.lst line {line} is in the FOC range and "
+                rep.err(f"art/{art_dir}.lst line {line} is in the mod's range and "
                         f"names {entry}, but no such file exists")
             else:
                 base_missing += 1
@@ -318,7 +318,7 @@ def check_art(gi, rep):
         # ported palette parks there on purpose - see repack_art.py); the check
         # that something used has landed above the cap is check_art_cap below.
         rep.ok(f"art/{art_dir}.lst: {checked} entries checked, "
-               f"{foc_missing} FOC-range problem(s)")
+               f"{foc_missing} mod-range problem(s)")
 
 
 def check_art_cap(gi, rep):
@@ -336,7 +336,7 @@ def check_art_cap(gi, rep):
                     f"address them. Run: python tools/repack_art.py")
         n_foc = sum(1 for i in used[art_dir] if i >= start)
         if n_foc and not over:
-            rep.ok(f"art/{art_dir}: {n_foc} used FOC entries, all below {ids_mod.ART_INDEX_CAP}")
+            rep.ok(f"art/{art_dir}: {n_foc} used mod entries, all below {ids_mod.ART_INDEX_CAP}")
     rep.ok(f"scanned {counts['maps']} map files, {counts['stamps']} stamps, "
            f"{counts['script_pids']} script-named protos")
 
@@ -503,7 +503,7 @@ def check_messages(gi, rep):
 
 def check_maps(gi, gi_full, rep):
     """gi is the pristine base view (what the ID space is assembled against);
-    gi_full also sees the deployed FOC layer, which a map needs for sizing
+    gi_full also sees the deployed mod layer, which a map needs for sizing
     objects whose protos are OURS (scenery subtypes carry extra fields) and
     for deciding whether a PID resolves anywhere the game will look."""
     rep.section("7 maps")
@@ -596,13 +596,13 @@ def check_worldmap(gi, rep):
     rep.section("8 worldmap")
     registry = worldmap.read_maps_registry()
     if not registry:
-        rep.ok("no FOC maps registered")
+        rep.ok("no mod maps registered")
         return
     problems = worldmap.check(gi, registry)
     for p in problems:
         rep.err(p)
     if not problems:
-        rep.ok(f"{len(registry)} FOC map(s): maps.txt + city.txt + map.msg "
+        rep.ok(f"{len(registry)} mod map(s): maps.txt + city.txt + map.msg "
                f"resolve over the base's {worldmap.base_map_count(gi)} maps / "
                f"{worldmap.base_area_count(gi)} areas")
 

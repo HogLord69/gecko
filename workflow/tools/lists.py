@@ -2,10 +2,10 @@
 """
 lists.py - assemble the .lst / .gam files the game actually loads.
 
-    full list = [ base entries ] [ filler up to FOC_START ] [ FOC entries ]
+    full list = [ base entries ] [ filler up to FOC_START ] [ mod entries ]
 
 The filler is what makes base updates survivable: if RPU grows, the filler
-shrinks and FOC indices stay put. See tools/ids.py for the reasoning.
+shrinks and mod indices stay put. See tools/ids.py for the reasoning.
 
 Used by both deploy.py (writes them) and validate.py (checks against them),
 so the two can never disagree about what an ID means.
@@ -35,7 +35,7 @@ def _assemble(base_entries: list[str], foc_entries: list[str],
               start: int, filler: str, space: str) -> list[str]:
     if len(base_entries) > start:
         raise Overflow(
-            f"{space}: base occupies {len(base_entries)} entries, past the FOC "
+            f"{space}: base occupies {len(base_entries)} entries, past the mod's "
             f"start at {start}"
         )
     pad = [filler] * (start - len(base_entries))
@@ -52,13 +52,13 @@ def scripts_lst(gi: GameIndex) -> list[str]:
                      FILLER["script"], "script")
 
 
-# Local variables each FOC script gets. The engine sizes a script's local
+# Local variables each mod script gets. The engine sizes a script's local
 # vars from the "# local_vars=N" note on its scripts.lst line (scripts.cc
 # scriptsLoadScriptsList) and has none without it: set_local_var is dropped
 # and local_var reads garbage. Local var 0 is also the engine's reaction
 # slot: start_gdialog opens a talking head good above 10, bad at -10 or
 # below (reaction.cc), and a script without local vars hands it an
-# uninitialised value - that is what had the colonists smiling. FOC scripts
+# uninitialised value - that is what had the colonists smiling. Mod scripts
 # leave var 0 at 0 so every head opens neutral.
 FOC_LOCAL_VARS = 8
 
@@ -181,16 +181,16 @@ def summary(gi: GameIndex) -> str:
     lines = []
     s = scripts_lst(gi)
     lines.append(f"scripts.lst    {len(s):6d} lines "
-                 f"(base {len(gi.scripts)}, FOC from {FOC_START['script']})")
+                 f"(base {len(gi.scripts)}, mod from {FOC_START['script']})")
     g = gvar_names(gi)
     lines.append(f"vault13.gam    {len(g):6d} slots "
-                 f"(base {len(gi.gvar_slots)}, FOC from {FOC_START['gvar']})")
+                 f"(base {len(gi.gvar_slots)}, mod from {FOC_START['gvar']})")
     for t, key in PROTO_KEY.items():
         foc = read_registry(IDS / f"{key}.txt")
         if foc:
             p = proto_lst(gi, t)
             lines.append(f"{TYPE_NAME[t]+'.lst':14s} {len(p):6d} lines "
-                         f"(base {len(gi.proto_lst(t))}, FOC from {FOC_START[key]})")
+                         f"(base {len(gi.proto_lst(t))}, mod from {FOC_START[key]})")
     return "\n".join(lines)
 
 

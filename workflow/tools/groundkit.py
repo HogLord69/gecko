@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
 groundkit.py - learn how Fallout 2 lays its ground tiles, and grow new ground
-for FOC maps that follows the same rules: broken asphalt with sand in its
+for mod maps that follows the same rules: broken asphalt with sand in its
 edges, kerbs and sidewalk fragments, dirt worn round buildings, the way the
 Den, Klamath and New Reno look.
 
     python tools/groundkit.py learn       # -> build/groundkit/ground.json
     python tools/groundkit.py demo        # -> build/groundkit/demo.png
 
-Only Fallout 2's own tiles are used, so every tile id is already FOC's (FOC
+Only Fallout 2's own tiles are used, so every tile id is already the mod's (mod
 runs on Fallout 2's art) and nothing is copied: a tile is chosen square by
 square so that it matches the tile to its left and the tile above it, using
 only pairs that Fallout 2's maps actually put side by side.

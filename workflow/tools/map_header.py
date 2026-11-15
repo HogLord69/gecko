@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-map_header.py - set a FOC map's header script and/or player start, in place.
+map_header.py - set a map's header script and/or player start, in place.
 
     python tools/map_header.py LAMESA.MAP --script SCRIPT_LAMESA
     python tools/map_header.py LAMESA.MAP --start 168,176 --rot 5

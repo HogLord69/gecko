@@ -20,7 +20,7 @@ add content occupy the same N for different things. So a .map lifted straight
 out of Sonora will render Sonora's scenery indices against OUR scenery list and
 produce garbage - or, worse, something that looks almost right.
 
-Porting therefore means: copy the bytes, allocate fresh indices at the FOC end
+Porting therefore means: copy the bytes, allocate fresh indices at the mod's end
 of each list, and patch every embedded reference to point at the new numbers.
 
 EVERY port is written to the ledger (mod/assets.csv), because reusing another
@@ -60,7 +60,7 @@ from ids import ART_INDEX_CAP, ART_KEY, FOC_START, PROTO_KEY, check_art_name, en
 # nothing (raw filename shown instead) or - worse - coincidentally matched an
 # UNRELATED existing base/RPU entry at that same number, showing a wrong,
 # misleading name (confirmed: a ported scenery proto showed as "Couch"). Fixed
-# by always allocating a fresh, collision-free message_id in FOC's own space
+# by always allocating a fresh, collision-free message_id in the mod's own space
 # and copying the real name text over from the source's own message file.
 MSG_FILE_FOR_TYPE = {
     "items": "pro_item.msg",
@@ -68,8 +68,8 @@ MSG_FILE_FOR_TYPE = {
     "scenery": "pro_scen.msg",
     "walls": "pro_wall.msg",
 }
-# Base names FOC renames in place, by file and message id. A vanilla proto
-# that FOC uses for one named character shows that character's name in the
+# Base names the mod renames in place, by file and message id. A vanilla proto
+# that the mod uses for one named character shows that character's name in the
 # party and combat text.
 BASE_MSG_OVERRIDES = {
     "pro_crit.msg": {
@@ -330,17 +330,17 @@ def read_msg_descs(art_dir: str) -> dict[str, str]:
 
 
 def msg_id_for_index(i: int) -> int:
-    """FOC message id of registry entry i. Entries are spaced TWO apart because
+    """Mod message id of registry entry i. Entries are spaced TWO apart because
     the engine hardcodes description = name id + 1 (proto.cc protoGetMessage:
     PROTOTYPE_MESSAGE_NAME=0, _DESCRIPTION=1). With names packed one apart,
-    examining any FOC object showed the NEXT entry's name as its description
+    examining any mod object showed the NEXT entry's name as its description
     (or blank for the last one). Even ids are names, odd ids descriptions."""
     return FOC_START_MSG + 2 * i
 
 
 def write_merged_msg(art_dir: str) -> None:
     """Regenerate mod/data/text/english/game/pro_<type>.msg as every BASE entry
-    plus every FOC-allocated one. A full replacement (FOC entries only) would
+    plus every mod-allocated one. A full replacement (mod entries only) would
     blank out every vanilla/RPU name of that type the instant this file is
     deployed - it must always be a superset, never a substitute."""
     fname = MSG_FILE_FOR_TYPE[art_dir]
@@ -380,7 +380,7 @@ def record_msg_desc(art_dir: str, name: str, desc: str) -> None:
 
 def ensure_message_id(source: str, src: GameIndex, art_dir: str, source_message_id: int) -> int:
     """Look up the source proto's real name in ITS OWN message file and give it
-    a fresh, collision-free id in FOC's space; 0 (no message) if no source name
+    a fresh, collision-free id in the mod's space; 0 (no message) if no source name
     is found. Never returns the source's raw message_id unpatched - leaving
     that as-is either shows nothing or, worse, coincidentally matches an
     unrelated existing base entry (confirmed: happened for real).
@@ -470,8 +470,8 @@ def cmd_file(args):
 
 def art_names_taken(art_dir: str) -> set[str]:
     """Lowercase names an engine_art_name() pick must avoid in art/<art_dir>:
-    the base game's own .lst (a same-name file in the FOC layer would shadow the
-    original everywhere), every FOC registry entry, and whatever is on disk."""
+    the base game's own .lst (a same-name file in the mod's layer would shadow the
+    original everywhere), every mod registry entry, and whatever is on disk."""
     base = base_index()
     try:
         taken = {n.lower() for n in parse_lst(base.vfs.read(f"art\\{art_dir}\\{art_dir}.lst")) if n}
@@ -497,14 +497,14 @@ def cmd_art(args):
         art_dir = parts[1].lower()
         key = ART_KEY.get(art_dir)
         if key is None:
-            print(f"  skip {gp}: art\\{art_dir} has no reserved FOC range")
+            print(f"  skip {gp}: art\\{art_dir} has no reserved mod range")
             continue
         # Name it for the ENGINE, not for us: art.cc::artReadList keeps only 12 chars
         # of a .lst entry, so a "<source>_<name>.frm" prefix (what this used to do)
         # produced 8,839 files the game could never open - invisible objects and the
         # 0x48d9c4 crash whenever one shared a tile. engine_art_name() gives an 8.3
         # name tagged with one source letter, checked against the base game's own
-        # list (the FOC layer mounts on top, so a bare vanilla name would silently
+        # list (the mod's layer mounts on top, so a bare vanilla name would silently
         # replace that asset everywhere), the registry and the files on disk.
         # Lowercased: gecko's LstReader lowercases every .lst entry it parses.
         if art_dir == "critters":
@@ -596,7 +596,7 @@ def cmd_proto(args):
         pid = int(raw, 0)
         t = pid_type(pid)
         if t not in PROTO_KEY:
-            print(f"  skip {raw}: type {t} has no reserved FOC range")
+            print(f"  skip {raw}: type {t} has no reserved mod range")
             continue
         sp = src.proto_path(pid)
         if sp is None or not src.vfs.exists(sp):
@@ -637,7 +637,7 @@ def cmd_proto(args):
             # info into the other bits - see gecko's FrmResolver.cpp / CRITTER_ID_MASK);
             # every other type uses the full 24-bit base-id field (BASE_ID_MASK). Using the
             # critter-only 12-bit mask here for scenery/walls/items silently wraps any index
-            # >= 4096 onto a low (base-game) index instead of the intended FOC-range one -
+            # >= 4096 onto a low (base-game) index instead of the intended mod-range one -
             # invisible until an art list actually grows past 4096 entries, which a big
             # enough bulk port does.
             id_mask = 0xFFF if art_dir == "critters" else 0xFFFFFF
@@ -662,7 +662,7 @@ def cmd_proto(args):
                         # No room to prefix here (see CRITTER_NAME_LEN) - keep the source's
                         # own name and only disambiguate when it truly collides, against
                         # EITHER vanilla's own critters.lst (the gap that let ported critters
-                        # silently replace original NPCs' art) OR another already-ported FOC
+                        # silently replace original NPCs' art) OR another already-ported mod
                         # critter of different content sharing the same name.
                         base, _, rest = lst_entry.partition(",")
                         desired = base.lower()[:CRITTER_NAME_LEN]
@@ -688,7 +688,7 @@ def cmd_proto(args):
                         # Engine-safe 8.3 name (see cmd_art): the engine keeps only 12
                         # chars of a .lst entry, so the old "<source>_<name>" prefix made
                         # every ported file unopenable. Tagged with one source letter and
-                        # checked against the base list (the FOC layer would otherwise
+                        # checked against the base list (the mod's layer would otherwise
                         # shadow a same-named vanilla asset), the registry and disk.
                         lst_entry = engine_art_name(args.source, lst_entry, art_names_taken(art_dir))
                         check_art_name(art_dir, lst_entry)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-find_art.py - list FOC art list entries (index, name) matching regexes.
+find_art.py - list mod art list entries (index, name) matching regexes.
 
     python tools/find_art.py critters "g(h)?ul" mut robe
     python tools/find_art.py scenery cask barrel

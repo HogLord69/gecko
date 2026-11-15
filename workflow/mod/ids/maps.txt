@@ -1,4 +1,4 @@
-# FOC maps: "<id> <FILENAME.MAP> <Display Name> [key=value ...]". Map ids start at 200.
+# Your maps: "<id> <FILENAME.MAP> <Display Name> [key=value ...]". Map ids start at 200.
 # Ids here are explicit (maps.txt is keyed, not positional), so gaps are fine.
 #
 # The display name doubles as the worldmap lookup_name (city.txt entrances and

@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-compose_map.py - build a FOC map from a recipe (mod/maps_src/<name>.compose.json)
+compose_map.py - build a map from a recipe (mod/maps_src/<name>.compose.json)
 by lifting whole levels or boxes out of other games' maps, converting their
-ids into FOC's (port_stamp.Converter), and adding FOC's own exits.
+ids into the mod's (port_stamp.Converter), and adding the mod's own exits.
 
     python tools/compose_map.py mod/maps_src/rwfac1.compose.json --preview
     python tools/compose_map.py mod/maps_src/rwfac1.compose.json --write [--force]
 
-Each FOC elevation is built from one or more `lift`s. A lift copies the
+Each mod elevation is built from one or more `lift`s. A lift copies the
 floor, the roof and the scenery and walls of a box of a source map (all of
 it when no rect is given), shifted by `shift` squares. What never comes
-across: critters (FOC's scripts put people in), misc objects (the source's
+across: critters (the mod's scripts put people in), misc objects (the source's
 exit grids and scroll blockers), loose items (the source's loot), and stairs,
 ladders and elevators (they carry the source game's map links). Containers
 come across empty. `drop` lists art-name regexes to leave out (logos,
@@ -94,8 +94,8 @@ class Composer:
         self._matcher = None
 
     def matcher(self):
-        """port_stamp.TileMatcher: the closest-looking FOC tile for a source tile
-        FOC lacks (tiles cannot be ported past gecko's 12-bit tile ids)."""
+        """port_stamp.TileMatcher: the closest-looking mod tile for a source tile
+        the mod lacks (tiles cannot be ported past gecko's 12-bit tile ids)."""
         if self._matcher is None:
             from port_stamp import Foc, TileMatcher
             self._matcher = TileMatcher(Foc())
@@ -109,8 +109,8 @@ class Composer:
         return self.converters[source]
 
     def convert_pid(self, source: str, pid: int):
-        """A source game's pid -> (FOC pid, FOC fid), or None. Fallout 2's
-        own pids are FOC's already."""
+        """A source game's pid -> (mod pid, mod fid), or None. Fallout 2's
+        own pids are the mod's already."""
         key = (source, pid)
         if not hasattr(self, "_pidcache"):
             self._pidcache = {}
@@ -563,7 +563,7 @@ class Composer:
                     self.mb.set_floor(de, sx, sy, rd["tile"])
 
     def stamps(self, level: dict):
-        """Gecko stamps from the library (FOC ids): {"file": "Ruins/....json",
+        """Gecko stamps from the library (mod ids): {"file": "Ruins/....json",
         "at": [hx, hy], "variant": 0}. Objects only; a stamp's floor/roof, if
         any, is laid too."""
         de = level["elev"]

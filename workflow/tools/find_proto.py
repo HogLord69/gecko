@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-find_proto.py - search FOC's protos by display name or art name.
+find_proto.py - search the mod's protos by display name or art name.
 
     python tools/find_proto.py scenery winch panel computer
     python tools/find_proto.py items keycard wire rope

@@ -1,5 +1,5 @@
 """
-foclib — shared plumbing for the FOC mod build/validate/port tools.
+foclib — shared plumbing for the mod build/validate/port tools.
 
 `GameIndex` is the thing most callers want: it wraps a base install and answers
 "what does this ID mean", using the same resolution order the engine uses.

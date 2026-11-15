@@ -241,7 +241,7 @@ def main() -> int:
                  if l.strip() and not l.startswith("#")]
         lines = [l for l in lines if not l.lower().startswith(("hmpcot", "hfpcot"))]
         lines += ["hmpcot,11,1", "hfpcot,11"]
-        header = ("# FOC critters art. First line = FOC_START[art_critters] (250).\n"
+        header = ("# The mod's critter art. First line = FOC_START[art_critters] (250).\n"
                   "# Entry = art prefix,flags as used by the engine.\n")
         reg.write_text(header + "\n".join(lines) + "\n", encoding="utf-8")
 

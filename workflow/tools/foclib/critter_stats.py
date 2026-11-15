@@ -22,7 +22,7 @@ def _get(buf, off, stat):
 
 
 def derived(buf) -> dict[int, int]:
-    """stat.cc critterUpdateDerivedStats for the stats FOC tunes. Max HP uses
+    """stat.cc critterUpdateDerivedStats for the stats the mod tunes. Max HP uses
     BASE strength and endurance (critterGetBaseStatWithTraitModifier); the
     rest use base + bonus (critterGetStat)."""
     base = lambda s: _get(buf, STATS_OFF, s)                       # noqa: E731

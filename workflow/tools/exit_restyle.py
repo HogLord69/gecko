@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-exit_restyle.py - rebuild every exit-grid patch on FOC maps the way Fallout,
+exit_restyle.py - rebuild every exit-grid patch on mod maps the way Fallout,
 Fallout 2 and the TCs lay them out.
 
     python tools/exit_restyle.py --preview build/exits      # report + before/after renders, nothing written

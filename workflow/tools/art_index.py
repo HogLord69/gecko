@@ -11,7 +11,7 @@ called.
 WHAT IS INDEXED
 ---------------
 Every FRM frame (all directions, all frames) under art\\ in:
-  * FOC itself: the base (Fallout 2 + RPU) + whatever is deployed + mod/data
+  * the mod itself: the base (Fallout 2 + RPU) + whatever is deployed + mod/data
     (so art ported but not yet deployed counts as ours)
   * every install in tools/sources.json that is not marked "derived"
     (a derived source is a tree this project generated; indexing it would make
@@ -49,7 +49,7 @@ import numpy as np  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "build" / "art_index"
-FOC_KEY = "FOC"
+FOC_KEY = "mod"
 VERSION = 2  # bump when the hash definition changes
 
 ART_FRM_EXT = (".frm",)

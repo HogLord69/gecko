@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-frm_sheet.py - contact sheet of FOC art by name, first frame of direction 0.
+frm_sheet.py - contact sheet of mod art by name, first frame of direction 0.
 
     python tools/frm_sheet.py scenery geckflr1 arhole1 traphol -o build/sheet.png
 

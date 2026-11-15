@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 map_survey.py - measure how the maps of Fallout 1, Fallout 2 and the total
-conversions are laid out, so a generated FOC map can follow the same habits.
+conversions are laid out, so a generated mod map can follow the same habits.
 
     python tools/map_survey.py                 # every source -> build/map_survey/
     python tools/map_survey.py --sources fo1,fo2

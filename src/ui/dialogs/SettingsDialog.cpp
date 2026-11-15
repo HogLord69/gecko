@@ -130,7 +130,7 @@ void SettingsDialog::setupModToolsTab() {
     _modToolsRootEdit = new QLineEdit();
     const std::filesystem::path detected = ModToolsRunner::detectRootAboveApplication();
     _modToolsRootEdit->setPlaceholderText(detected.empty()
-            ? QString("e.g. F:\\FOCMod")
+            ? QString("e.g. C:\\gecko\\workflow")
             : "found automatically: " + QDir::toNativeSeparators(QString::fromStdU16String(detected.u16string())));
     rootRow->addWidget(_modToolsRootEdit, 1);
     auto* rootBrowse = new QPushButton("Browse...");

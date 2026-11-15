@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 port_stamp.py - convert a gecko stamp saved while browsing another game (via
-tools/gecko_browse) into FOC's ID space, so it stamps the same thing in the
-FOC editing profile.
+tools/gecko_browse) into the mod's ID space, so it stamps the same thing in the
+mod editing profile.
 
     python tools/port_stamp.py --all --dry-run          # detect + report only
     python tools/port_stamp.py --all                    # convert every TC stamp
@@ -15,8 +15,8 @@ WHY THIS EXISTS
 ---------------
 A stamp (gecko's pattern JSON) stores raw ids: proPid, frmPid and tileId. Those
 are positions in the game's own proto and art .lst files (see port.py's
-docstring), so a stamp saved in a Sonora session and stamped in the FOC profile
-draws whatever FOC keeps at those positions - a random mess. Every gecko session
+docstring), so a stamp saved in a Sonora session and stamped in the mod's profile
+draws whatever the mod keeps at those positions - a random mess. Every gecko session
 also saves into the same %LOCALAPPDATA%\\gecko\\gecko\\patterns folder, with no
 record of which game a stamp came from.
 
@@ -24,33 +24,33 @@ WHICH GAME A STAMP CAME FROM
 ----------------------------
 Every object carries both its proPid and its frmPid, and in the game it was
 captured from the proto at proPid has exactly that FID. That agreement is
-checked against every source in tools/sources.json and against FOC itself; the
-game that agrees best wins. A stamp FOC already agrees with as well as any TC
+checked against every source in tools/sources.json and against the mod itself; the
+game that agrees best wins. A stamp the mod already agrees with as well as any TC
 is left alone (Nevada and Resurrection reuse most vanilla numbering, so many of
-their stamps are already correct in FOC).
+their stamps are already correct in the mod).
 
 HOW EACH ID IS MAPPED
 ---------------------
 Objects, in order:
-  1. already ported by port.py / port_bulk.py (the ledger) -> that FOC pid
-  2. the same pid in FOC has the identical .pro and identical art -> kept
-  3. a FOC proto of the same type draws byte-identical art -> that pid
-     (port_bulk skipped art FOC already had, so this is common)
+  1. already ported by port.py / port_bulk.py (the ledger) -> that mod pid
+  2. the same pid in the mod has the identical .pro and identical art -> kept
+  3. a mod proto of the same type draws byte-identical art -> that pid
+     (port_bulk skipped art the mod already had, so this is common)
   4. otherwise port.py's cmd_proto ports it (fresh pid + art, ledgered)
   frmPid follows the chosen proto, or - for an object drawn with art other than
-  its proto's - is matched to FOC art by bytes, porting the art if FOC lacks it.
+  its proto's - is matched to mod art by bytes, porting the art if the mod lacks it.
 
 Tiles: a map square stores a 12-bit tile id and base tiles.lst already fills
-4077 of the 4096 lines (CLAUDE.md 4d), so a tile is matched to FOC's
+4077 of the 4096 lines (CLAUDE.md 4d), so a tile is matched to the mod's
 byte-identical tile when there is one, and otherwise ported into a spare line
 of tiles.lst (tools/tile_slots.py: lines that repeat an earlier tile's picture
-or have no art, and that nothing of FOC's uses). Only when the spare lines run
-out is it swapped for the closest-looking FOC tile (coarse colour/texture/outline
+or have no art, and that nothing of the mod's uses). Only when the spare lines run
+out is it swapped for the closest-looking mod tile (coarse colour/texture/outline
 distance - see TileMatcher - each side decoded with its own game's palette). Every swap is contact-printed to
 build/stamp_port/<stamp>_tiles.png, source on the left, chosen tile on the right.
 A stamp with no objects (a roof or a floor) can't be told by its protos, so
 with --source it counts as the source's when any of its tile ids draws
-something else in FOC than in the source.
+something else in the mod than in the source.
 
 The original stamp is copied to _safety_backups/stamp_originals/<source>/ on F:,
 never under %LOCALAPPDATA%: a process started from the Claude desktop app (an
@@ -62,7 +62,7 @@ block (gecko ignores unknown keys). Ported art lands at the end of the art
 lists, above the engine's 4096 cap - run tools/repack_art.py afterwards to move
 everything a map or stamp uses below it.
 
-What the FOC view learns from each file (an art file's sha1, a proto's FID and
+What the mod's view learns from each file (an art file's sha1, a proto's FID and
 flags) is kept in build/stamp_port/foc_view.json and read again only for files
 whose size or time changed (FileFacts): reading all of mod/data on every run
 made each stamp gecko converted take over a minute.
@@ -108,7 +108,7 @@ def own_stamps() -> list[Path]:
 REPORT_DIR = ROOT / "build" / "stamp_port"
 MOD_DATA = ROOT / "mod" / "data"
 
-# Sources that cannot be a stamp's origin: fo2 IS the base FOC already stands
+# Sources that cannot be a stamp's origin: fo2 IS the base the mod already stands
 # on, and fonline3 is an art-only pack with no maps or protos to stamp from.
 NOT_STAMP_SOURCES = {"fo2", "fonline3"}
 TILE_W, TILE_H = 80, 36
@@ -129,7 +129,7 @@ def art_file(art_dir: str, entry: str) -> str:
     return port.critter_art_filename(entry) if art_dir == "critters" else entry
 
 
-# ------------------------------------------------------------------ FOC view
+# ------------------------------------------------------------------ mod view
 
 def base_signature(gi: GameIndex) -> list:
     """What the base's files depend on: every archive's size and time, and every loose layer's
@@ -156,7 +156,7 @@ def base_signature(gi: GameIndex) -> list:
 
 
 class FileFacts:
-    """What the FOC view learns from each file it reads (an art file's sha1, a proto's FID and
+    """What the mod's view learns from each file it reads (an art file's sha1, a proto's FID and
     flags), kept between runs in REPORT_DIR/foc_view.json so a run opens only the files that changed
     since the last one. Opening each of the mod's ~20,000 loose art and proto files took over a
     minute on Windows, for a stamp whose pieces the mod already had. A file in mod/data is known by
@@ -226,7 +226,7 @@ def _proto_summary(b: bytes | None) -> list[int] | None:
 
 
 class Foc:
-    """FOC as the next deploy will ship it: base plus mod/ids + mod/data,
+    """The mod as the next deploy will ship it: base plus mod/ids + mod/data,
     read straight from the authored tree so freshly ported protos and art are
     visible before deploy.py has run."""
 
@@ -336,7 +336,7 @@ class Foc:
             return None
 
     def proto_fid_flags(self, pid: int) -> list[int] | None:
-        """[fid, flags] of a FOC proto, without reading it again once known (FileFacts)."""
+        """[fid, flags] of a mod proto, without reading it again once known (FileFacts)."""
         t = pid_type(pid)
         if t not in TYPE_NAME:
             return None
@@ -347,7 +347,7 @@ class Foc:
         return self.fact(f"proto/{TYPE_NAME[t]}", lst[i], _proto_summary)
 
     def protos_by_art(self, t: int) -> dict[int, list[int]]:
-        """art index -> FOC pids of type t whose proto draws it, base first."""
+        """art index -> mod pids of type t whose proto draws it, base first."""
         if t not in self._protos_by_art:
             d = TYPE_NAME[t]
             out: dict[int, list[int]] = {}
@@ -386,8 +386,8 @@ def detect(d: dict, foc: Foc, sources: dict[str, GameIndex],
         if name in overlay:
             # An overlay source (see "overlay" in tools/sources.json) holds only the
             # pieces BEYOND the base, so judge it on those alone: a stamp of vanilla
-            # pieces plus a few new ones must not be called plain FOC just because
-            # FOC agrees with most of its objects.
+            # pieces plus a few new ones must not be called the mod's own just because
+            # the mod agrees with most of its objects.
             new = {(pro, frm) for pro, frm in pairs
                    if pid_index(pro) > len(foc.gi.proto_lst(pid_type(pro)))}
             scores[name] = agreement(gi, new, lambda g, p: g.proto(p)) if new else 0.0
@@ -402,8 +402,8 @@ def detect(d: dict, foc: Foc, sources: dict[str, GameIndex],
 # ------------------------------------------------------------------- tiles
 
 def tiles_differ(d: dict, foc: Foc, src: GameIndex) -> bool:
-    """Does any tile id in the stamp draw something else in FOC than in the
-    source? (A stamp of FOC's own tiles, or of tiles the two share, doesn't.)"""
+    """Does any tile id in the stamp draw something else in the mod than in the
+    source? (A stamp of the mod's own tiles, or of tiles the two share, doesn't.)"""
     try:
         src_lst = parse_lst(src.vfs.read("art\\tiles\\tiles.lst"))
     except FileNotFoundError:
@@ -434,7 +434,7 @@ def tile_rgba(data: bytes, palette) -> np.ndarray:
     return np.asarray(canvas, dtype=np.uint8)
 
 
-# Look-alike metric, tuned by eye on the 67 Sonora tiles FOC lacks (contact
+# Look-alike metric, tuned by eye on the 67 Sonora tiles the mod lacks (contact
 # sheets in build/stamp_port/). Coarse on purpose: two dirt tiles never agree
 # pixel for pixel, and a per-pixel distance prefers whatever shares the outline
 # over whatever shares the colour and texture - which is what reads as "the same
@@ -667,7 +667,7 @@ class Converter:
                 if idx is not None:
                     out = (frm & ~mask & 0xFFFFFFFF) | idx
         if out is None:
-            self.notes.append(f"art 0x{frm:08X} for proto 0x{pid:08X}: no FOC match")
+            self.notes.append(f"art 0x{frm:08X} for proto 0x{pid:08X}: no mod match")
         self.frm_map[frm] = out
         return out
 
@@ -716,7 +716,7 @@ class Converter:
         except (RuntimeError, ValueError) as e:
             self.notes.append(f"tile {name}: {e}")
             return None
-        # what the FOC view already read: the new line, and its picture
+        # what the mod's view already read: the new line, and its picture
         lst = self.foc.art_list("tiles")
         if tid < len(lst):
             lst[tid] = name.lower()
@@ -820,7 +820,7 @@ def main() -> int:
 
     def matcher_fn():
         if not matcher:
-            print("  indexing FOC floor tiles for look-alike matching...")
+            print("  indexing mod floor tiles for look-alike matching...")
             matcher.append(TileMatcher(foc))
         return matcher[0]
 
@@ -840,7 +840,7 @@ def main() -> int:
         src_name, scores = detect(d, foc, sources, overlay)
         if (args.source and src_name is None and not stamp_pairs(d) and args.source in sources
                 and tiles_differ(d, foc, sources[args.source])):
-            src_name = args.source      # tiles-only stamp: its ids draw other tiles in FOC
+            src_name = args.source      # tiles-only stamp: its ids draw other tiles in mod
         if src_name is None and args.source in overlay and not stamp_pairs(d):
             # a floor-only stamp from an overlay launcher is the source's own if it
             # uses a tile beyond the base's list
@@ -850,7 +850,7 @@ def main() -> int:
                 src_name = args.source
         top =", ".join(f"{k} {v:.2f}" for k, v in sorted(scores.items(), key=lambda kv: -kv[1])[:3])
         if src_name is None:
-            print(f"{p.stem}: already FOC-compatible ({top}) - left alone")
+            print(f"{p.stem}: already mod-compatible ({top}) - left alone")
             continue
         print(f"{p.stem}: from {src_name} ({top})")
         conv = Converter(foc, src_name, sources[src_name], args.dry_run, p.stem,

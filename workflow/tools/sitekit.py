@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-sitekit.py - design a FOC map in code and write it as a compose_map.py
+sitekit.py - design a map in code and write it as a compose_map.py
 recipe. Nothing is copied from another map: buildings are drawn with wall
 families learned from the original games (wallkit.py), ground is grown from
 Fallout 2's own tile rules (groundkit.py), rooms are furnished for their job,
 clutter gathers along walls the way it does in the originals, and the story
 scenes come from templates drawn from docs/MAP_STORYTELLING_GUIDE.md.
 
-Every scenery pid here is Fallout 2's own (below FOC's first id), so no
+Every scenery pid here is Fallout 2's own (below the mod's first id), so no
 Olympus asset can get in; compose_map.py refuses Olympus objects anyway.
 
 A design script (tools/designs/<map>.py) builds a Site and calls save().

@@ -25,7 +25,7 @@ from foclib import GameIndex, MapFile  # noqa: E402
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("source", help="sources.json name, fo2 (the pristine base) or foc (FOC's maps)")
+    ap.add_argument("source", help="sources.json name, fo2 (the pristine base) or foc (the mod's maps)")
     ap.add_argument("map")
     ap.add_argument("elev", type=int)
     ap.add_argument("-o", "--out", required=True)
@@ -33,7 +33,7 @@ def main() -> int:
     ap.add_argument("--grid", type=int, default=10)
     args = ap.parse_args()
 
-    # "foc" = FOC's own maps as deployed (base/mods/foc); "fo2" = the pristine base
+    # "foc" = the mod's own maps as deployed (base/mods/foc); "fo2" = the pristine base
     gi = (GameIndex() if args.source == "fo2" else GameIndex(pristine=False) if args.source == "foc"
           else port.open_source(args.source))
     name = args.map if args.map.lower().endswith(".map") else args.map + ".map"
