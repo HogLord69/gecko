@@ -22,7 +22,9 @@ The object palette has a **Game** list. Pick another game you have installed and
 
 Drop one on the map and it is brought into your mod first, with new numbers, so it works in your game and shows at once; **Tools > Apply New Art** puts it in the game. Dropping it again uses the same copy. Scenery, walls, misc pieces and items that have no inventory picture (desks, lockers, chests, keys) come across. Critters, weapons, armor, ammo and drugs are refused with the reason: their other numbers (AI packet, talking head, ammo, inventory picture) would point at the wrong things. A piece's script stays behind, since its number means another script in your game.
 
-It works with the [map workflow](#the-map-workflow) that comes with this build: run `python setup.py` in the `workflow` folder once and give it the folders of the other games you have. gecko finds that folder by itself when it sits beside `gecko.exe`, as it does in the release zip (or set it in **File > Preferences > Mod Tools**).
+**File > Browse Maps** has the same Game list: pick a game to look through its maps, thumbnails and preview drawn with its own data. They are looked at, not opened, since their object numbers mean other pieces in your game; to work on one, start gecko on that game with `python foc.py browse`.
+
+It works with the [map workflow](#the-map-workflow) that comes with this build: run `python setup.py` in the `workflow` folder once and give it the folders of the other games you have. It finds the best-known total conversions by itself, and takes any other Fallout-engine game or mod (Et Tu, say) by its folder. gecko finds that folder by itself when it sits beside `gecko.exe`, as it does in the release zip (or set it in **File > Preferences > Mod Tools**).
 
 ### Stamps that come with it
 

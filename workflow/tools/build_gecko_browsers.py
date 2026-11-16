@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -188,6 +189,21 @@ def rebuild_fallback_art() -> None:
     say(f"  _fallback_art/: {n} file(s) from gecko's resources/art/")
 
 
+def other_games() -> dict[str, dict]:
+    """The games setup was given by folder (config.json "game_labels"), launched as a standalone
+    game: its master.dat and critter.dat, then its patch*.dat archives in order, then its folder."""
+    out = {}
+    labels = config.game_labels()
+    for key, root in config.games().items():
+        if key in GAMES or key.endswith("_client"):
+            continue
+        label = labels.get(key) or root.name
+        out[key] = dict(name=re.sub(r'[<>:"/\\|?*]', "", label).strip() or key, label=label,
+                        extra=[p.name for p in sorted(root.glob("patch*.dat"), key=lambda p: p.name.lower())],
+                        own=True, under=None, convert=True)
+    return out
+
+
 def game_root(key: str) -> Path | None:
     if key == "fo2":
         return config.fallout2_dir()
@@ -213,7 +229,7 @@ def main() -> int:
     rebuild_fallback_art()
 
     made = []
-    for key, g in GAMES.items():
+    for key, g in {**GAMES, **other_games()}.items():
         root = game_root(key)
         if not root:
             continue

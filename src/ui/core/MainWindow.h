@@ -15,7 +15,9 @@
 #include <QLabel>
 #include <QSettings>
 #include <QByteArray>
+#include <QList>
 #include <QMenu>
+#include <QPair>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -192,6 +194,9 @@ private slots:
     void editNameAndText(ModToolsRunner& runner, quint32 pid);
     /// Give the object palette the other games the mod tools list (gecko_assets.py sources/source).
     void connectOtherGames();
+    /// The other games the mod tools list (gecko_assets.py sources) as (id, label), or none with
+    /// `note` saying why.
+    QList<QPair<QString, QString>> listOtherGames(QString* note);
     /// Mount (or re-read) the overlay a mod tools answer names and forget the lists it replaces.
     void mountOverlay(const QJsonObject& answer);
     void onPlayGame();

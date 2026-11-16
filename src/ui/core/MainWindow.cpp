@@ -3115,6 +3115,29 @@ void MainWindow::editNameAndText(ModToolsRunner& runner, quint32 pid) {
     showStatusMessage(QString("Saved the name and examine text for %1. %2").arg(pidText(pid), AFTER_APPLY));
 }
 
+QList<QPair<QString, QString>> MainWindow::listOtherGames(QString* note) {
+    QList<QPair<QString, QString>> games;
+    if (!modToolsConfigured()) {
+        *note = "Other games come from your mod's tools: set the mod folder in File > Preferences > Mod Tools";
+        return games;
+    }
+    ModToolsRunner runner(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()), _settings->getPythonExecutable());
+    const ModToolResult result = runner.runAndWait({ "sources" });
+    if (!result.ok) {
+        *note = "The mod tools didn't list the other games: " + result.error;
+        return games;
+    }
+    for (const auto& value : result.json.value("games").toArray()) {
+        const QJsonObject game = value.toObject();
+        games.push_back({ game.value("id").toString(), game.value("label").toString() });
+    }
+    if (games.isEmpty()) {
+        const QString hint = result.json.value("note").toString();
+        *note = hint.isEmpty() ? QString("No other games are set up in the mod's tools/sources.json") : hint;
+    }
+    return games;
+}
+
 void MainWindow::connectOtherGames() {
     if (!_objectPalettePanel) {
         return;
@@ -3122,23 +3145,8 @@ void MainWindow::connectOtherGames() {
     _objectPalettePanel->setOtherGameProviders(
         [this](QString* note) {
             QList<ObjectPalettePanel::OtherGame> games;
-            if (!modToolsConfigured()) {
-                *note = "Other games come from your mod's tools: set the mod folder in File > Preferences > Mod Tools";
-                return games;
-            }
-            ModToolsRunner runner(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()), _settings->getPythonExecutable());
-            const ModToolResult result = runner.runAndWait({ "sources" });
-            if (!result.ok) {
-                *note = "The mod tools didn't list the other games: " + result.error;
-                return games;
-            }
-            for (const auto& value : result.json.value("games").toArray()) {
-                const QJsonObject game = value.toObject();
-                games.push_back({ game.value("id").toString(), game.value("label").toString() });
-            }
-            if (games.isEmpty()) {
-                const QString hint = result.json.value("note").toString();
-                *note = hint.isEmpty() ? QString("No other games are set up in the mod's tools/sources.json") : hint;
+            for (const auto& [id, label] : listOtherGames(note)) {
+                games.push_back({ id, label });
             }
             return games;
         },
@@ -3378,15 +3386,48 @@ void MainWindow::updateFillSelectionAction() {
 }
 
 void MainWindow::showMapBrowserDialog() {
-    auto dataPaths = _settings->getDataPaths();
-    util::ensureFallbackDataPath(dataPaths, Application::getResourcesPath());
-    MapBrowserDialog dialog(*_resourcesShared, std::move(dataPaths), this);
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
+    // The Game list above the maps (the same games as the object palette's): picking one opens the
+    // browser again on that game's maps, drawn with its own data.
+    QList<MapBrowserDialog::Game> others;
+    if (modToolsConfigured()) {
+        QString note;
+        for (const auto& [id, label] : listOtherGames(&note)) {
+            others.push_back({ id, label });
+        }
     }
-    const QString mapPath = dialog.selectedMapPath();
-    if (!mapPath.isEmpty()) {
-        handleMapLoadRequest(mapPath.toStdString(), false);
+    QString game; // "" = the game being edited
+    for (;;) {
+        resource::GameResources* resources = _resourcesShared.get();
+        std::vector<std::filesystem::path> dataPaths;
+        if (game.isEmpty()) {
+            dataPaths = _settings->getDataPaths();
+            util::ensureFallbackDataPath(dataPaths, Application::getResourcesPath());
+        } else {
+            const auto picked = std::find_if(others.begin(), others.end(), [&game](const auto& g) { return g.id == game; });
+            const QString label = picked != others.end() ? picked->label : game;
+            resources = _objectPalettePanel ? _objectPalettePanel->otherGameResources(game, label) : nullptr;
+            if (resources == nullptr) { // it said why; back to the game being edited
+                game.clear();
+                continue;
+            }
+            dataPaths = _objectPalettePanel->otherGameLayers(game);
+            util::ensureFallbackDataPath(dataPaths, Application::getResourcesPath());
+        }
+        MapBrowserDialog dialog(*resources, std::move(dataPaths), this);
+        dialog.setGames(others, game);
+        const int answer = dialog.exec();
+        if (answer == MapBrowserDialog::SwitchGame) {
+            game = dialog.requestedGame();
+            continue;
+        }
+        if (answer != QDialog::Accepted || !game.isEmpty()) {
+            return;
+        }
+        const QString mapPath = dialog.selectedMapPath();
+        if (!mapPath.isEmpty()) {
+            handleMapLoadRequest(mapPath.toStdString(), false);
+        }
+        return;
     }
 }
 
