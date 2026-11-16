@@ -24,9 +24,13 @@ python foc.py
 | **[Python 3.10+](https://www.python.org/downloads/)** | tick "Add python.exe to PATH" when installing |
 | **gecko** | the zip from [Releases](https://github.com/HogLord69/gecko/releases/latest). Unzip it anywhere |
 
-**Optional:** any other Fallout-engine games you own, to borrow buildings from: Fallout 1,
-Fallout: Sonora, Fallout: Nevada, Nevada Mod (Extended), Olympus 2207, Fallout 1.5:
-Resurrection, Story of the Jackal, Fallout: Yesterday.
+**Optional:** any other Fallout-engine games you own, to borrow buildings from. Setup finds
+Fallout 1, Fallout: Sonora, Fallout: Nevada, Nevada Mod (Extended), Olympus 2207, Fallout 1.5:
+Resurrection, Story of the Jackal and Fallout: Yesterday by themselves; any other game or mod
+(Et Tu, say) it takes by its folder: give the folder when it asks for another game, or run
+`python setup.py --other "Fallout Et Tu=C:\Games\Fallout Et Tu"`. Each one shows in gecko's
+Game list (object palette) and in **File > Browse Maps**, and gets a launcher in
+`python foc.py browse`.
 
 ## Set up (once)
 

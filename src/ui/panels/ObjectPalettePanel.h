@@ -115,6 +115,8 @@ public:
     /// Another game's data, loaded (as the Game list loads it) the first time it is asked for; null
     /// after saying why it can't be read. The Pattern Library draws that game's stamps with it.
     resource::GameResources* otherGameResources(const QString& id, const QString& label);
+    /// The data paths another game was loaded from (lowest priority first); empty until it is.
+    [[nodiscard]] std::vector<std::filesystem::path> otherGameLayers(const QString& id) const;
 
     // Initialization
     void loadObjects();
@@ -187,6 +189,7 @@ private:
     bool _gamesListed = false;
     QString _activeGame; // empty: the map's own game
     std::map<QString, std::unique_ptr<resource::GameResources>> _otherGames;
+    std::map<QString, std::vector<std::filesystem::path>> _otherGameLayers; ///< what each was mounted from
 
     // Category tabs
     QTabWidget* _categoryTabs = nullptr;

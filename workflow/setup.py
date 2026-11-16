@@ -16,6 +16,8 @@ Flags for scripts / no questions:
     --base PATH            an existing working copy to use instead of building one
     --game KEY=PATH        another game, repeatable. Keys: fo1 sonora nevada olympus
                            resurrection sotj yesterday nevada_extended
+    --other "NAME=PATH"    any other Fallout-engine game or mod, by its folder (Et Tu, say),
+                           repeatable. Asked for at the end of the games when interactive.
     --no-pip               do not install Python packages
     --no-launchers         do not generate the gecko launchers
 """
@@ -144,6 +146,31 @@ def find_gecko() -> Path | None:
     return Path(w) if w else None
 
 
+def add_other_game(cfg: dict, name: str, folder: str) -> str | None:
+    """Add a game setup doesn't know, by its folder and a name; its key in config.json, or None."""
+    path = Path(folder)
+    if not config.is_game_folder(path):
+        say(f"    ! {folder}: no .dat archives and no data folder there - not a game's folder, skipped")
+        return None
+    name = name or path.name
+    for k, v in cfg["games"].items():
+        if v and Path(v).resolve() == path.resolve():
+            if k in GAMES:
+                say(f"    already set up, as {GAMES[k][0]}")
+            else:
+                cfg["game_labels"][k] = name
+                say(f"    already set up; now named {name}")
+            return k
+    base = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "game"
+    key, n = base, 2
+    while key in cfg["games"] or key in GAMES or key in ("fo2", "fonline2", "fonline3"):
+        key, n = f"{base}_{n}", n + 1
+    cfg["games"][key] = str(path)
+    cfg["game_labels"][key] = name
+    say(f"    added {name}: {path}")
+    return key
+
+
 # ------------------------------------------------------------------------------ python
 
 def check_python(yes: bool, no_pip: bool) -> bool:
@@ -199,6 +226,8 @@ def main() -> int:
     ap.add_argument("--gecko")
     ap.add_argument("--base", help="use an existing working copy instead of workflow/base")
     ap.add_argument("--game", action="append", default=[], metavar="KEY=PATH")
+    ap.add_argument("--other", action="append", default=[], metavar="NAME=PATH",
+                    help="a game setup doesn't know, by its folder (repeatable)")
     ap.add_argument("--no-pip", action="store_true")
     ap.add_argument("--no-launchers", action="store_true")
     args = ap.parse_args()
@@ -253,7 +282,25 @@ def main() -> int:
             cfg["games"][key] = a
         elif a:
             say(f"    ! {a} is not a folder - skipped")
+
+    # --- any other Fallout-engine game or mod, by its folder
+    labels = cfg.setdefault("game_labels", {})
+    for kv in args.other:
+        name, _, folder = kv.partition("=")
+        add_other_game(cfg, name.strip(), folder.strip().strip('"'))
+    others = {k: v for k, v in cfg["games"].items() if k not in GAMES and not k.endswith("_client")}
+    if others or not yes:
+        say("\n  Any other Fallout-engine game or mod (Et Tu, say) can be added by its folder.")
+    for k, v in others.items():
+        say(f"  {labels.get(k) or k}: {v}")
+    while not yes:
+        folder = ask("  Another game's folder (the one with its master.dat; Enter when done)", "")
+        if not folder:
+            break
+        name = ask("  Its name", Path(folder).name)
+        add_other_game(cfg, name, folder)
     cfg["games"] = {k: v for k, v in cfg["games"].items() if v}
+    cfg["game_labels"] = {k: v for k, v in labels.items() if k in cfg["games"]}
 
     # --- gecko
     say("\n3. gecko (the map editor)")

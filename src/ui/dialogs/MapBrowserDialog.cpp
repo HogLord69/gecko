@@ -5,7 +5,10 @@
 
 #include <QApplication>
 #include <QColor>
+#include <QComboBox>
 #include <QDialogButtonBox>
+#include <QHBoxLayout>
+#include <QSignalBlocker>
 #include <QEvent>
 #include <QFileInfo>
 #include <QFontMetrics>
@@ -164,7 +167,22 @@ MapBrowserDialog::MapBrowserDialog(resource::GameResources& resources,
     _openButton = buttons->button(QDialogButtonBox::Open);
     _openButton->setEnabled(false);
 
+    // Which game's maps (setGames fills it; hidden until then).
+    auto* gameRow = new QWidget(this);
+    auto* gameLayout = new QHBoxLayout(gameRow);
+    gameLayout->setContentsMargins(0, 0, 0, 0);
+    gameLayout->addWidget(new QLabel("Game:", gameRow));
+    _gameCombo = new QComboBox(gameRow);
+    _gameCombo->setObjectName("mapBrowserGame");
+    gameLayout->addWidget(_gameCombo, 1);
+    gameRow->setVisible(false);
+    _gameNote = new QLabel(this);
+    _gameNote->setWordWrap(true);
+    _gameNote->setVisible(false);
+
     auto* layout = new QVBoxLayout(this);
+    layout->addWidget(gameRow);
+    layout->addWidget(_gameNote);
     layout->addWidget(_search);
     layout->addWidget(splitter, 1);
     layout->addWidget(buttons);
@@ -175,6 +193,10 @@ MapBrowserDialog::MapBrowserDialog(resource::GameResources& resources,
     _thumbnailTimer->setInterval(0);
     connect(_thumbnailTimer, &QTimer::timeout, this, &MapBrowserDialog::renderNextVisibleThumbnail);
 
+    connect(_gameCombo, &QComboBox::currentIndexChanged, this, [this](int picked) {
+        _requestedGame = _gameCombo->itemData(picked).toString();
+        done(SwitchGame); // the caller opens the browser again on that game's data
+    });
     connect(_search, &QLineEdit::textChanged, this, &MapBrowserDialog::onFilterChanged);
     connect(_grid, &QListWidget::currentItemChanged, this, &MapBrowserDialog::onCurrentItemChanged);
     connect(_grid, &QListWidget::itemActivated, this, &MapBrowserDialog::onItemActivated);
@@ -333,8 +355,32 @@ void MapBrowserDialog::onFilterChanged(const QString& text) {
     _thumbnailTimer->start(); // render any cells the filter just revealed
 }
 
+void MapBrowserDialog::setGames(const QList<Game>& others, const QString& current) {
+    const QSignalBlocker block(_gameCombo);
+    _gameCombo->clear();
+    _gameCombo->addItem("Your game", QString());
+    for (const Game& game : others) {
+        _gameCombo->addItem(game.label, game.id);
+    }
+    const int index = _gameCombo->findData(current);
+    _gameCombo->setCurrentIndex(index >= 0 ? index : 0);
+    _currentGame = index > 0 ? current : QString();
+    _gameCombo->parentWidget()->setVisible(!others.isEmpty());
+
+    if (!_currentGame.isEmpty()) {
+        const QString label = _gameCombo->currentText();
+        setWindowTitle("Browse Maps: " + label);
+        _gameNote->setText(QString("%1's maps, drawn with its own data. They can't be opened here: their object "
+                                   "numbers mean other pieces in your game. To work on one, start gecko on %1 with "
+                                   "the map workflow (python foc.py browse, in the workflow folder).")
+                               .arg(label));
+        _gameNote->setVisible(true);
+        _openButton->setEnabled(false);
+    }
+}
+
 void MapBrowserDialog::onCurrentItemChanged(const QListWidgetItem* current) {
-    _openButton->setEnabled(current != nullptr);
+    _openButton->setEnabled(current != nullptr && _currentGame.isEmpty());
     updatePreview(current);
 }
 
@@ -405,13 +451,16 @@ bool MapBrowserDialog::eventFilter(QObject* watched, QEvent* event) {
 }
 
 void MapBrowserDialog::onItemActivated(const QListWidgetItem* item) {
-    if (item != nullptr) {
+    if (item != nullptr && _currentGame.isEmpty()) { // another game's map is looked at, not opened
         _selectedPath = item->data(PATH_ROLE).toString();
         accept();
     }
 }
 
 void MapBrowserDialog::acceptCurrent() {
+    if (!_currentGame.isEmpty()) {
+        return;
+    }
     if (const QListWidgetItem* item = _grid->currentItem()) {
         _selectedPath = item->data(PATH_ROLE).toString();
         accept();

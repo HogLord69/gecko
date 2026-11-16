@@ -5,7 +5,11 @@
 #include "support/Fixtures.h"
 #include "ui/panels/ObjectPalettePanel.h"
 #include "pattern/PatternLibrary.h"
+#include "ui/dialogs/MapBrowserDialog.h"
 #include "ui/dialogs/PatternBrowserDialog.h"
+
+#include <QDialogButtonBox>
+#include <QPushButton>
 
 #include <QCheckBox>
 #include <QDir>
@@ -373,6 +377,40 @@ TEST_CASE("Without the mod tools another game's stamps are not passed off as the
 
     revealFolder(tree, bundled, "HogLord Props");
     CHECK(gameNote(dialog).isEmpty());
+}
+
+TEST_CASE("Browse Maps offers the other games, and only looks at their maps", "[qt][othergames]") {
+    geck::resource::GameResources resources;
+    const QList<geck::MapBrowserDialog::Game> others{ { "sonora", "Fallout: Sonora" }, { "et_tu", "Fallout Et Tu" } };
+
+    geck::MapBrowserDialog own(resources);
+    own.setGames(others, QString());
+    auto* combo = own.findChild<QComboBox*>("mapBrowserGame");
+    REQUIRE(combo != nullptr);
+    CHECK(combo->count() == 3); // the game being edited, then the others
+    CHECK(combo->currentIndex() == 0);
+    CHECK_FALSE(combo->parentWidget()->isHidden());
+    combo->setCurrentIndex(2);
+    CHECK(own.result() == geck::MapBrowserDialog::SwitchGame); // the browser is opened again on it
+    CHECK(own.requestedGame() == "et_tu");
+
+    geck::MapBrowserDialog sonora(resources);
+    sonora.setGames(others, "sonora");
+    CHECK(sonora.windowTitle().contains("Fallout: Sonora"));
+    auto* buttons = sonora.findChild<QDialogButtonBox*>();
+    REQUIRE(buttons != nullptr);
+    CHECK_FALSE(buttons->button(QDialogButtonBox::Open)->isEnabled()); // its numbers aren't this game's
+    bool said = false;
+    for (auto* label : sonora.findChildren<QLabel*>()) {
+        said = said || (!label->isHidden() && label->text().contains("can't be opened here"));
+    }
+    CHECK(said);
+
+    geck::MapBrowserDialog alone(resources);
+    alone.setGames({}, QString());
+    auto* none = alone.findChild<QComboBox*>("mapBrowserGame");
+    REQUIRE(none != nullptr);
+    CHECK(none->parentWidget()->isHidden()); // no other games: no Game list
 }
 
 TEST_CASE("Someone with no stamps of their own opens the Pattern Library on Fallout 2's", "[qt][othergames]") {

@@ -221,6 +221,7 @@ bool ObjectPalettePanel::loadOtherGame(const QString& id, const QString& label) 
     }
     spdlog::info("ObjectPalettePanel: loaded {} ({} data paths) for the Game picker", label.toStdString(), layers.size());
     _otherGames[id] = std::move(game);
+    _otherGameLayers[id] = std::move(layers);
     if (newPieces) {
         _newPieces[id] = std::move(*newPieces);
     }
@@ -232,6 +233,11 @@ resource::GameResources* ObjectPalettePanel::otherGameResources(const QString& i
         return nullptr;
     }
     return _otherGames.at(id).get();
+}
+
+std::vector<std::filesystem::path> ObjectPalettePanel::otherGameLayers(const QString& id) const {
+    const auto found = _otherGameLayers.find(id);
+    return found != _otherGameLayers.end() ? found->second : std::vector<std::filesystem::path>{};
 }
 
 resource::GameResources& ObjectPalettePanel::activeResources() const {
@@ -263,6 +269,7 @@ void ObjectPalettePanel::releaseOtherGames() {
         game->clearCaches(); // textures go while the GL context is still there
     }
     _otherGames.clear();
+    _otherGameLayers.clear();
     _newPieces.clear();
     if (_onlyNewCheck) {
         _onlyNewCheck->setVisible(false);

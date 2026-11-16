@@ -5,10 +5,12 @@
 #include <vector>
 
 #include <QDialog>
+#include <QList>
 #include <QPixmap>
 #include <QSet>
 #include <QString>
 
+class QComboBox;
 class QEvent;
 class QLabel;
 class QLineEdit;
@@ -50,6 +52,18 @@ public:
     /// VFS path of the chosen map (e.g. "maps/sfshutl2.map"); empty unless accepted.
     QString selectedMapPath() const { return _selectedPath; }
 
+    /// exec()'s answer when another game was picked in the Game list: open the browser again on
+    /// requestedGame()'s maps ("" = the map's own game).
+    static constexpr int SwitchGame = 2;
+    struct Game {
+        QString id;    ///< "" for the game being edited
+        QString label;
+    };
+    /// Offer a Game list above the maps: the game being edited, then `others`. `current` is the
+    /// one shown; another game's maps are drawn with its own data and can't be opened here.
+    void setGames(const QList<Game>& others, const QString& current);
+    QString requestedGame() const { return _requestedGame; }
+
 protected:
     void showEvent(QShowEvent* event) override;
     // Rescales the preview to fit when the preview label is resized (e.g. by the splitter).
@@ -79,6 +93,10 @@ private:
     QTimer* _thumbnailTimer = nullptr;
     QPixmap _previewSource; ///< Native-resolution preview, rescaled to fit on resize.
     QString _selectedPath;
+    QComboBox* _gameCombo = nullptr;
+    QLabel* _gameNote = nullptr;
+    QString _currentGame;   ///< "" = the game being edited
+    QString _requestedGame;
 
     // Background renderer for cache misses (null when no data paths were provided). Requests
     // are queued to the worker's thread; results arrive through onWorkerRendered.

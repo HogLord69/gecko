@@ -17,7 +17,11 @@ Everything machine-specific lives in one file, workflow/config.json, which
                                             map (see own_worldmap() below)
       "games": {                            other games to borrow from, keyed as in
         "sonora": "C:/Games/Fallout Sonora",    tools/sources.json. Any you do not own: leave out.
-        "nevada": "C:/Games/Fallout Nevada"
+        "nevada": "C:/Games/Fallout Nevada",
+        "et_tu":  "C:/Games/Fallout Et Tu"      a key tools/sources.json doesn't have is a game
+      },                                        setup was given by folder ("Another game")
+      "game_labels": {                      the names of those games
+        "et_tu": "Fallout Et Tu"
       }
     }
 
@@ -133,14 +137,35 @@ def games() -> dict[str, Path]:
     return out
 
 
+def game_labels() -> dict[str, str]:
+    """The names setup was given for games it didn't know (config.json "game_labels")."""
+    return {k: str(v) for k, v in (load().get("game_labels") or {}).items() if v}
+
+
+def is_game_folder(path: Path) -> bool:
+    """Something a Fallout-engine game reads: .dat archives (or folders named like them) or data/."""
+    return path.is_dir() and ((path / "master.dat").exists() or any(path.glob("*.dat"))
+                              or (path / "data").is_dir())
+
+
 def apply_sources(srcs: dict[str, dict]) -> dict[str, dict]:
-    """Fill tools/sources.json's blank paths from config.json; drop games not installed.
+    """Fill tools/sources.json's blank paths from config.json; drop games not installed; add
+    the games setup was given by folder, which tools/sources.json doesn't know.
 
     A tool that asks for a source this machine does not have gets the same "unknown
     source" answer as for a name that does not exist, with the list of those it does.
     """
     cfg = load()
     g = games()
+    labels = game_labels()
+    for name, p in g.items():
+        if name in srcs or name.endswith("_client"):
+            continue
+        label = labels.get(name) or p.name
+        srcs = {**srcs, name: {
+            "project": label, "label": label, "added": "by setup.py, from its folder",
+            "credit": f"**TODO**: credit the makers of {label}, and ask them before sharing their work",
+        }}
     out: dict[str, dict] = {}
     for name, entry in srcs.items():
         e = dict(entry)
