@@ -64,8 +64,18 @@ public:
     /// The answer in a finished command's output: the last line of stdout that is a JSON object.
     static ModToolResult parseOutput(int exitCode, const QByteArray& standardOutput, const QByteArray& standardError);
 
+    /// The Python packages (pip names) an answer says the tools' Python lacks: its "missing" list, or
+    /// the package a bare "No module named ..." names when the tools couldn't answer at all.
+    static QStringList missingPackages(const ModToolResult& result);
+
 private:
     QStringList scriptArguments(const QStringList& args) const;
+    /// run() / runAndWait() without the offer to install missing packages.
+    QProcess* runOnce(const QStringList& args, std::function<void(const ModToolResult&)> done);
+    ModToolResult runOnceAndWait(const QStringList& args, int timeoutMs);
+    /// Ask to install `packages` with this runner's Python, and do it; true once they are installed.
+    /// Asked at most once a session if the answer is no.
+    bool offerToInstall(const QStringList& packages, const QString& pythonPath);
 
     std::filesystem::path _root;
     QString _python;

@@ -209,6 +209,16 @@ void SettingsDialog::checkModTools() {
     if (pending > 0) {
         text += QString(" %1 new piece(s) or name change(s) wait for Tools > Apply New Art.").arg(pending);
     }
+    QStringList missing;
+    for (const auto& value : result.json.value("missing").toArray()) {
+        missing << value.toString();
+    }
+    if (!missing.isEmpty()) {
+        _modToolsStatus->setStyleSheet(ui::theme::styles::statusError());
+        text += QString(" That Python lacks %1, which the tools need: gecko offers to install them the first time a "
+                        "tool runs.")
+                    .arg(missing.join(", "));
+    }
     _modToolsStatus->setText(text);
 }
 

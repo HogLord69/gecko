@@ -1,15 +1,26 @@
 #include "ModToolsRunner.h"
 
+#include <QApplication>
 #include <QCoreApplication>
+#include <QDir>
 #include <QEventLoop>
+#include <QGuiApplication>
+#include <QHash>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QList>
+#include <QMessageBox>
 #include <QPointer>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QProgressDialog>
+#include <QRegularExpression>
 #include <QTimer>
+#include <QWidget>
 #include <spdlog/spdlog.h>
+
+#include "ui/QtDialogs.h"
 
 #include <algorithm>
 #include <memory>
@@ -123,6 +134,20 @@ QStringList ModToolsRunner::scriptArguments(const QStringList& args) const {
 }
 
 QProcess* ModToolsRunner::run(const QStringList& args, std::function<void(const ModToolResult&)> done) {
+    QPointer<ModToolsRunner> self(this);
+    return runOnce(args, [self, args, done = std::move(done)](const ModToolResult& result) mutable {
+        if (self && !result.ok) {
+            const QStringList missing = missingPackages(result);
+            if (!missing.isEmpty() && self->offerToInstall(missing, result.json.value("python_path").toString())) {
+                self->runOnce(args, std::move(done)); // once more, now that they are there
+                return;
+            }
+        }
+        done(result);
+    });
+}
+
+QProcess* ModToolsRunner::runOnce(const QStringList& args, std::function<void(const ModToolResult&)> done) {
     auto* process = new QProcess(this);
     process->setProgram(_python);
     process->setArguments(scriptArguments(args));
@@ -162,6 +187,115 @@ QProcess* ModToolsRunner::run(const QStringList& args, std::function<void(const 
 }
 
 ModToolResult ModToolsRunner::runAndWait(const QStringList& args, int timeoutMs) {
+    ModToolResult result = runOnceAndWait(args, timeoutMs);
+    if (!result.ok) {
+        const QStringList missing = missingPackages(result);
+        if (!missing.isEmpty() && offerToInstall(missing, result.json.value("python_path").toString())) {
+            result = runOnceAndWait(args, timeoutMs);
+        }
+    }
+    return result;
+}
+
+QStringList ModToolsRunner::missingPackages(const ModToolResult& result) {
+    QStringList packages;
+    for (const auto& value : result.json.value("missing").toArray()) {
+        packages << value.toString();
+    }
+    if (packages.isEmpty() && result.json.isEmpty()) {
+        // No answer at all: Python stopped before the tools could check, on a bare import.
+        static const QRegularExpression noModule(QStringLiteral(R"(No module named '([A-Za-z_][A-Za-z0-9_]*))"));
+        const QString module = noModule.match(result.error).captured(1);
+        static const QHash<QString, QString> pipNames{ { "PIL", "pillow" }, { "numpy", "numpy" }, { "scipy", "scipy" },
+            { "cv2", "opencv-python-headless" } };
+        if (pipNames.contains(module)) {
+            packages << pipNames.value(module);
+        }
+    }
+    packages.removeAll(QString());
+    return packages;
+}
+
+bool ModToolsRunner::offerToInstall(const QStringList& packages, const QString& pythonPath) {
+    static bool declined = false; // asked once a session: no again would only nag
+    static bool busy = false;     // a second answer arriving while pip runs waits for the first
+    if (declined || busy || packages.isEmpty() || QGuiApplication::platformName() == QLatin1String("offscreen")) {
+        return false;
+    }
+    static const QHash<QString, QString> shown{ { "pillow", "Pillow" }, { "numpy", "NumPy" }, { "scipy", "SciPy" },
+        { "opencv-python-headless", "OpenCV" } };
+    QStringList names;
+    for (const QString& package : packages) {
+        names << shown.value(package, package);
+    }
+    const QString python = QDir::toNativeSeparators(pythonPath.isEmpty() ? _python : pythonPath);
+    QWidget* parent = QApplication::activeWindow();
+
+    QMessageBox ask(parent);
+    ask.setIcon(QMessageBox::Question);
+    ask.setWindowTitle("Python Packages");
+    ask.setText(QString("The map tools need %1, which the Python gecko runs them with doesn't have.").arg(names.join(", ")));
+    ask.setInformativeText(QString("Install them now? gecko runs pip with that Python:\n%1\n\n"
+                                   "It needs the internet and takes a minute or two.")
+                               .arg(python));
+    ask.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+    ask.setDefaultButton(QMessageBox::Yes);
+    if (ask.exec() != QMessageBox::Yes) {
+        declined = true;
+        return false;
+    }
+
+    busy = true;
+    QProgressDialog progress(QString("Installing %1...").arg(names.join(", ")), QString(), 0, 0, parent);
+    progress.setWindowTitle("Python Packages");
+    progress.setWindowModality(Qt::ApplicationModal);
+    progress.setMinimumDuration(0);
+    progress.setCancelButton(nullptr);
+    progress.show();
+
+    QProcess pip;
+    pip.setProgram(_python);
+    pip.setArguments(QStringList{ "-m", "pip", "install", "--disable-pip-version-check" } + packages);
+    pip.setProcessChannelMode(QProcess::MergedChannels);
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("PYTHONIOENCODING"), QStringLiteral("utf-8"));
+    pip.setProcessEnvironment(environment);
+    QEventLoop loop;
+    connect(&pip, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), &loop, &QEventLoop::quit);
+    connect(&pip, &QProcess::errorOccurred, &loop, [&loop](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart) {
+            loop.quit();
+        }
+    });
+    QTimer::singleShot(15 * 60 * 1000, &loop, &QEventLoop::quit);
+    pip.start();
+    loop.exec();
+    const bool finished = pip.state() == QProcess::NotRunning;
+    if (!finished) {
+        pip.kill();
+        pip.waitForFinished(3000);
+    }
+    const bool installed = finished && pip.exitStatus() == QProcess::NormalExit && pip.exitCode() == 0;
+    const QByteArray output = pip.readAll();
+    progress.close();
+    busy = false;
+    spdlog::info("Mod tools: pip install {} -> {}", packages.join(u' ').toStdString(), installed ? "installed" : "failed");
+
+    if (!installed) {
+        QString detail = lastLines(output, 10);
+        if (detail.isEmpty()) {
+            detail = pip.errorString();
+        }
+        QtDialogs::showWarning(parent, "Python Packages",
+            QString("pip couldn't install them:\n\n%1\n\nTo install them by hand, open a Command Prompt (not Python "
+                    "itself) and run:\n\"%2\" -m pip install %3")
+                .arg(detail, python, packages.join(u' ')));
+        return false;
+    }
+    return true;
+}
+
+ModToolResult ModToolsRunner::runOnceAndWait(const QStringList& args, int timeoutMs) {
     struct Wait {
         ModToolResult result;
         bool finished = false;
@@ -171,7 +305,7 @@ ModToolResult ModToolsRunner::runAndWait(const QStringList& args, int timeoutMs)
     QEventLoop loop;
     wait->loop = &loop;
 
-    QPointer<QProcess> process = run(args, [wait](const ModToolResult& result) {
+    QPointer<QProcess> process = runOnce(args, [wait](const ModToolResult& result) {
         wait->result = result;
         wait->finished = true;
         if (wait->loop) {

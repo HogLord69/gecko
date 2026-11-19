@@ -77,7 +77,7 @@ def doctor() -> int:
         ok(f"Python {v.major}.{v.minor}")
     else:
         fail(f"Python {v.major}.{v.minor} is too old", "install Python 3.10 or newer from python.org")
-    for mod, pkg in (("PIL", "pillow"), ("numpy", "numpy"), ("scipy", "scipy")):
+    for mod, pkg in (("PIL", "pillow"), ("numpy", "numpy"), ("scipy", "scipy"), ("cv2", "opencv-python-headless")):
         try:
             __import__(mod)
         except ImportError:
