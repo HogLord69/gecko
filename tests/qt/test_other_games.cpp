@@ -423,6 +423,26 @@ TEST_CASE("A tools answer of missing packages comes back as it is when no one ca
     CHECK(geck::ModToolsRunner::missingPackages(result) == QStringList{ "numpy" });
 }
 
+TEST_CASE("A tools answer of a missing working copy comes back as it is when no one can be asked", "[qt][othergames]") {
+    QTemporaryDir root;
+    REQUIRE(root.isValid());
+    const std::filesystem::path kit(root.path().toStdU16String());
+    write(kit / "setup.py", "raise SystemExit('not to be run off screen')\n");
+    write(kit / "tools" / "gecko_assets.py",
+        "import json, os\n"
+        "kit = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))\n"
+        "print(json.dumps({'ok': False, 'needs_base': True, 'base': os.path.join(kit, 'base'),"
+        " 'fallout2': '', 'setup': os.path.join(kit, 'setup.py'), 'error': 'no working copy'}))\n");
+    geck::ModToolsRunner runner(kit, "python");
+    const geck::ModToolResult result = runner.runAndWait({ "port", "sonora", "0x02000001" }, 60000);
+    if (result.json.isEmpty()) {
+        SKIP("no python on this machine's PATH: " + result.error.toStdString());
+    }
+    CHECK_FALSE(result.ok);
+    CHECK(result.json.value("needs_base").toBool());
+    CHECK_FALSE(std::filesystem::exists(kit / "base")); // nothing was made without anyone saying so
+}
+
 TEST_CASE("Browse Maps offers the other games, and only looks at their maps", "[qt][othergames]") {
     geck::resource::GameResources resources;
     const QList<geck::MapBrowserDialog::Game> others{ { "sonora", "Fallout: Sonora" }, { "et_tu", "Fallout Et Tu" } };

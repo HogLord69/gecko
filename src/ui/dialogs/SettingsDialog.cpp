@@ -219,6 +219,11 @@ void SettingsDialog::checkModTools() {
                         "tool runs.")
                     .arg(missing.join(", "));
     }
+    if (result.json.contains("base_ready") && !result.json.value("base_ready").toBool()) {
+        _modToolsStatus->setStyleSheet(ui::theme::styles::statusError());
+        text += " The tools have no working copy of Fallout 2 yet: gecko offers to make it the first time a tool "
+                "needs it.";
+    }
     _modToolsStatus->setText(text);
 }
 

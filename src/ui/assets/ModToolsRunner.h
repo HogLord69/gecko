@@ -68,6 +68,10 @@ public:
     /// the package a bare "No module named ..." names when the tools couldn't answer at all.
     static QStringList missingPackages(const ModToolResult& result);
 
+    /// The Fallout 2 folder gecko itself loads (from its data paths), offered when the map workflow
+    /// has no working copy yet and its own setup doesn't know one. Set once by the main window.
+    static void setGameFolderHint(std::function<QString()> hint);
+
 private:
     QStringList scriptArguments(const QStringList& args) const;
     /// run() / runAndWait() without the offer to install missing packages.
@@ -76,6 +80,12 @@ private:
     /// Ask to install `packages` with this runner's Python, and do it; true once they are installed.
     /// Asked at most once a session if the answer is no.
     bool offerToInstall(const QStringList& packages, const QString& pythonPath);
+    /// Ask to make the map workflow's working copy of Fallout 2 (its setup.py --build-base, from a
+    /// Fallout 2 folder) when an answer says it is missing; true once it is there.
+    bool offerToMakeWorkingCopy(const QJsonObject& answer);
+    /// Offer what fixes a failed answer (packages, then the working copy); true when something was fixed
+    /// and the command is worth running again.
+    bool tryToFix(const ModToolResult& result);
 
     std::filesystem::path _root;
     QString _python;

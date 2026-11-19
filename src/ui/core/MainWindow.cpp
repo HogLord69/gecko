@@ -3139,6 +3139,33 @@ QList<QPair<QString, QString>> MainWindow::listOtherGames(QString* note) {
 }
 
 void MainWindow::connectOtherGames() {
+    // The Fallout 2 folder gecko loads (a data path or the Game Location holding master.dat, one with
+    // RPU first): what the mod tools' working copy is made from when their own setup knows none.
+    ModToolsRunner::setGameFolderHint([this]() {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        fs::path best;
+        const auto consider = [&best, &ec](fs::path path) {
+            if (path.empty()) {
+                return;
+            }
+            if (fs::is_regular_file(path, ec)) {
+                path = path.parent_path();
+            }
+            if (!fs::exists(path / "master.dat", ec)) {
+                return;
+            }
+            if (best.empty() || (fs::exists(path / "mods" / "rpu.dat", ec) && !fs::exists(best / "mods" / "rpu.dat", ec))) {
+                best = path;
+            }
+        };
+        for (const auto& path : _settings->getDataPaths()) {
+            consider(path);
+        }
+        consider(_settings->getGameDataDirectory());
+        consider(_settings->getExecutableGameLocation().parent_path());
+        return QString::fromStdU16String(best.u16string());
+    });
     if (!_objectPalettePanel) {
         return;
     }

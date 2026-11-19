@@ -99,7 +99,44 @@ def roots() -> list[Path]:
     for sub in ("Games", "Downloads", "Desktop"):
         if (home / sub).is_dir():
             out.append(home / sub)
-    return out
+    return out + steam_libraries()
+
+
+def steam_libraries() -> list[Path]:
+    """steamapps\\common of every Steam library (a library can be on any drive: D:\\SteamLibrary),
+    from Steam's own libraryfolders.vdf."""
+    steam_dirs = []
+    try:
+        import winreg
+        for hive, key in ((winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam"),
+                          (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam")):
+            try:
+                with winreg.OpenKey(hive, key) as k:
+                    for value in ("SteamPath", "InstallPath"):
+                        try:
+                            steam_dirs.append(Path(winreg.QueryValueEx(k, value)[0]))
+                        except OSError:
+                            pass
+            except OSError:
+                pass
+    except ImportError:
+        pass
+    steam_dirs += [Path(r"C:\Program Files (x86)\Steam"), Path(r"C:\Program Files\Steam")]
+    out = []
+    for steam in steam_dirs:
+        vdf = steam / "steamapps" / "libraryfolders.vdf"
+        libraries = [steam]
+        if vdf.is_file():
+            text = vdf.read_text(encoding="utf-8", errors="replace")
+            libraries += [Path(m.replace("\\\\", "\\")) for m in re.findall(r'"path"\s+"([^"]+)"', text)]
+        out += [lib / "steamapps" / "common" for lib in libraries]
+    seen, unique = set(), []
+    for p in out:
+        key = str(p).lower()
+        if key not in seen and p.is_dir():
+            seen.add(key)
+            unique.append(p)
+    return unique
 
 
 def folders() -> list[Path]:

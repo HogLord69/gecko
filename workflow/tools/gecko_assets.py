@@ -423,6 +423,38 @@ def missing_packages() -> list[str]:
     return [pkg for mod, pkg in PACKAGES.items() if importlib.util.find_spec(mod) is None]
 
 
+# The working copy of Fallout 2 the tools read the game from and deploy into (the deployed layer's
+# game folder). The map workflow kit makes it with setup.py --build-base; without it most commands
+# can't run, and the answer says so (needs_base) so gecko can offer to make it.
+NO_BASE_NEEDED = {"info", "sources", "stamp-games", "pending"}
+
+
+def working_copy() -> Path:
+    return DEPLOYED.parent.parent
+
+
+def configured_fallout2() -> str:
+    """The Fallout 2 folder the map workflow kit was given (its config.json), if it holds a game."""
+    try:
+        from foclib import config   # the kit's: where this computer keeps its games
+    except ImportError:
+        return ""
+    p = config.fallout2_dir()
+    return str(p) if p and (p / "master.dat").exists() else ""
+
+
+def missing_working_copy() -> dict | None:
+    base = working_copy()
+    if (base / "master.dat").exists():
+        return None
+    setup = ROOT / "setup.py"
+    return {"ok": False, "needs_base": True, "base": str(base), "fallout2": configured_fallout2(),
+            "setup": str(setup) if setup.is_file() else "",
+            "error": f"The map tools have no working copy of Fallout 2 yet ({base}): they read the game from it "
+                     f"and put new pieces into it. Make it once with: python setup.py --build-base (in "
+                     f"{ROOT}), giving it your Fallout 2 folder with the Restoration Project Unofficial in it."}
+
+
 def cmd_info(_args) -> dict:
     return {
         "root": str(ROOT),
@@ -430,6 +462,7 @@ def cmd_info(_args) -> dict:
         "python": sys.version.split()[0],
         "python_path": sys.executable,
         "missing": missing_packages(),
+        "base_ready": missing_working_copy() is None,
         "games_running": games_running(),
         "browse_session": BROWSE_MARKER.exists(),
         "pending": len(read_pending()),
@@ -1437,6 +1470,9 @@ def main() -> int:
         result = {"ok": False, "missing": missing, "python_path": sys.executable,
                   "error": f"The Python running the map tools ({sys.executable}) doesn't have {', '.join(missing)}, "
                            f"which they need. Install them with: \"{sys.executable}\" -m pip install {' '.join(missing)}"}
+        print(json.dumps(result))
+        return 1
+    if args.cmd not in NO_BASE_NEEDED and (result := missing_working_copy()):
         print(json.dumps(result))
         return 1
     try:
