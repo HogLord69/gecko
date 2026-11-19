@@ -877,6 +877,8 @@ class Composer:
                    by its neighbours as Day Glow's are (tools/dayglow_survey.py's table).
           "apron_skip": [[x0, y0, x1, y1], ...]  squares of it left as sand: drifts over the
                    sidewalk, which Day Glow has along about a tenth of a building's edge.
+          "storeys": 2  the roof shows a second storey (tools/dayglow_roof.py); "roof": false
+                   leaves the roof off (a building open to the sky)
           "paving": [[x0, y0, x1, y1], ...]  boxes of squares paved the way the sidewalk is, curbs
                    and all: a square, a yard. "apron_skip" leaves drifts in it too.
         At the foot of the dark walls the slab is laid in shadow, as Day Glow lays it: the row of
@@ -1026,8 +1028,33 @@ class Composer:
                     if ys:
                         run = [((x // 2, sy), (x // 2 + 1, sy)) for sy in range(min(ys) // 2, max(ys) // 2 + 1)]
                         n_shadow += g.lay_shadow("west", run, srng)
+            # the roof, as Day Glow lays one (tools/dayglow_roof.py): tar paper over a one-storey
+            # building, the second storey's wall faces as well over a two-storey one ("storeys": 2).
+            # Not over an upper floor (its own level is never seen from outside) or a building
+            # given "roof": false. Roofs of two buildings that touch hide together in the game.
+            n_roof = 0
+            if b.get("xrows") and not b.get("black_edge") and b.get("roof", True):
+                import dayglow_roof
+                roofed = getattr(self, "_dayglow_roofs", {}).setdefault(de, {})
+                if not hasattr(self, "_dayglow_roofs"):
+                    self._dayglow_roofs = {de: roofed}
+                me = b.get("id") or b.get("plan") or str(len(roofed))
+                for (sx, sy), name in dayglow_roof.roof(b, int(b.get("storeys", 1)), b.get("seed", 0)).items():
+                    if not (0 <= sx < 100 and 0 <= sy < 100):
+                        continue
+                    if name not in ids:
+                        raise SystemExit(f"dayglow {me}: no roof tile {name} in the mod's tiles.lst")
+                    self.mb.set_roof(de, sx, sy, ids[name])
+                    roofed[(sx, sy)] = me
+                    n_roof += 1
+                touch = sorted({roofed[n] for (sx, sy), who in roofed.items() if who == me
+                                for n in ((sx + 1, sy), (sx - 1, sy), (sx, sy + 1), (sx, sy - 1))
+                                if roofed.get(n, me) != me})
+                if touch:
+                    print(f"  WARNING dayglow {me}: its roof touches the roof of {', '.join(touch)}: they hide together")
             print(f"  dayglow {b.get('id', '?')}: {len(built['walls'])} wall pieces, {len(built['blocks'])} blockers, "
                   f"{len(built['doors'])} doors, {len(b.get('rooms', []))} rooms, {len(b.get('pieces', []))} pieces, {n_apron} squares of sidewalk, {n_shadow} in shadow"
+                  + (f", {n_roof} roof tiles ({int(b.get('storeys', 1))} storey{'s' if int(b.get('storeys', 1)) > 1 else ''})" if n_roof else "")
                   + (f"; {missing} pieces the mod has no proto for" if missing else ""))
 
     def stamps(self, level: dict):

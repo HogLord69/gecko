@@ -4,7 +4,9 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QEventLoop>
+#include <QFileInfo>
 #include <QGuiApplication>
+#include <QPushButton>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -133,18 +135,46 @@ QStringList ModToolsRunner::scriptArguments(const QStringList& args) const {
     return QStringList{ toQString(scriptFor(_root)) } + args;
 }
 
+namespace {
+    std::function<QString()>& gameFolderHint() {
+        static std::function<QString()> hint;
+        return hint;
+    }
+} // namespace
+
+void ModToolsRunner::setGameFolderHint(std::function<QString()> hint) {
+    gameFolderHint() = std::move(hint);
+}
+
+bool ModToolsRunner::tryToFix(const ModToolResult& result) {
+    if (result.ok) {
+        return false;
+    }
+    const QStringList missing = missingPackages(result);
+    if (!missing.isEmpty()) {
+        return offerToInstall(missing, result.json.value("python_path").toString());
+    }
+    if (result.json.value("needs_base").toBool()) {
+        return offerToMakeWorkingCopy(result.json);
+    }
+    return false;
+}
+
 QProcess* ModToolsRunner::run(const QStringList& args, std::function<void(const ModToolResult&)> done) {
+    // Up to two fixes in a row (the packages, then the working copy), the command run again after each.
+    auto attempt = std::make_shared<std::function<QProcess*(int)>>();
     QPointer<ModToolsRunner> self(this);
-    return runOnce(args, [self, args, done = std::move(done)](const ModToolResult& result) mutable {
-        if (self && !result.ok) {
-            const QStringList missing = missingPackages(result);
-            if (!missing.isEmpty() && self->offerToInstall(missing, result.json.value("python_path").toString())) {
-                self->runOnce(args, std::move(done)); // once more, now that they are there
+    *attempt = [self, args, done = std::move(done), attempt](int fixesLeft) -> QProcess* {
+        return self->runOnce(args, [self, done, attempt, fixesLeft](const ModToolResult& result) {
+            if (self && fixesLeft > 0 && self->tryToFix(result)) {
+                (*attempt)(fixesLeft - 1);
                 return;
             }
-        }
-        done(result);
-    });
+            done(result);
+            *attempt = nullptr; // the chain holds itself until it is answered
+        });
+    };
+    return (*attempt)(2);
 }
 
 QProcess* ModToolsRunner::runOnce(const QStringList& args, std::function<void(const ModToolResult&)> done) {
@@ -188,13 +218,122 @@ QProcess* ModToolsRunner::runOnce(const QStringList& args, std::function<void(co
 
 ModToolResult ModToolsRunner::runAndWait(const QStringList& args, int timeoutMs) {
     ModToolResult result = runOnceAndWait(args, timeoutMs);
-    if (!result.ok) {
-        const QStringList missing = missingPackages(result);
-        if (!missing.isEmpty() && offerToInstall(missing, result.json.value("python_path").toString())) {
-            result = runOnceAndWait(args, timeoutMs);
-        }
+    for (int fixesLeft = 2; fixesLeft > 0 && tryToFix(result); --fixesLeft) {
+        result = runOnceAndWait(args, timeoutMs);
     }
     return result;
+}
+
+bool ModToolsRunner::offerToMakeWorkingCopy(const QJsonObject& answer) {
+    static bool declined = false;
+    static bool busy = false;
+    const QString setup = answer.value("setup").toString();
+    const QString base = answer.value("base").toString();
+    if (declined || busy || setup.isEmpty() || !QFileInfo::exists(setup)
+        || QGuiApplication::platformName() == QLatin1String("offscreen")) {
+        return false; // without the workflow's setup.py the answer's own message says what to do
+    }
+    const auto holdsGame = [](const QString& folder) {
+        return !folder.isEmpty() && QFileInfo::exists(QDir(folder).filePath("master.dat"));
+    };
+    QString folder = answer.value("fallout2").toString();
+    if (!holdsGame(folder) && gameFolderHint()) {
+        folder = gameFolderHint()();
+    }
+    if (!holdsGame(folder)) {
+        folder.clear();
+    }
+    QWidget* parent = QApplication::activeWindow();
+
+    for (;;) {
+        QMessageBox ask(parent);
+        ask.setIcon(QMessageBox::Question);
+        ask.setWindowTitle("Working Copy of Fallout 2");
+        ask.setText("The map tools need their own working copy of Fallout 2, made once from your Fallout 2 folder.");
+        ask.setInformativeText(folder.isEmpty()
+                ? QString("gecko didn't find your Fallout 2 folder: choose it (the one with master.dat in it).")
+                : QString("From: %1\nInto: %2\n\nAbout 1.2 GB and a few minutes. Your Fallout 2 folder is only read. It "
+                          "should have the Restoration Project Unofficial installed (mods\\rpu.dat in it).")
+                      .arg(QDir::toNativeSeparators(folder), QDir::toNativeSeparators(base)));
+        QPushButton* make = folder.isEmpty() ? nullptr : ask.addButton("Make It", QMessageBox::AcceptRole);
+        QPushButton* choose = ask.addButton(folder.isEmpty() ? "Choose Folder..." : "Another Folder...", QMessageBox::ActionRole);
+        ask.addButton(QMessageBox::Cancel);
+        ask.setDefaultButton(make ? make : choose);
+        ask.exec();
+        if (ask.clickedButton() == choose) {
+            const QString picked = QtDialogs::selectDirectory(parent, "Your Fallout 2 Folder");
+            if (holdsGame(picked)) {
+                folder = picked;
+            } else if (!picked.isEmpty()) {
+                QtDialogs::showWarning(parent, "Working Copy of Fallout 2",
+                    "There's no master.dat in that folder. Choose the folder Fallout 2 is installed in.");
+            }
+            continue;
+        }
+        if (make == nullptr || ask.clickedButton() != make) {
+            declined = true;
+            return false;
+        }
+        break;
+    }
+
+    busy = true;
+    QProgressDialog progress("Making the working copy of Fallout 2...", QString(), 0, 0, parent);
+    progress.setWindowTitle("Working Copy of Fallout 2");
+    progress.setWindowModality(Qt::ApplicationModal);
+    progress.setMinimumDuration(0);
+    progress.setCancelButton(nullptr);
+    progress.setMinimumWidth(520);
+    progress.show();
+
+    QProcess process;
+    process.setProgram(_python);
+    process.setArguments({ setup, "--yes", "--build-base", "--fallout2", QDir::toNativeSeparators(folder) });
+    process.setWorkingDirectory(toQString(_root));
+    process.setProcessChannelMode(QProcess::MergedChannels);
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("PYTHONIOENCODING"), QStringLiteral("utf-8"));
+    environment.insert(QStringLiteral("PYTHONUNBUFFERED"), QStringLiteral("1"));
+    process.setProcessEnvironment(environment);
+    QByteArray output;
+    connect(&process, &QProcess::readyRead, &progress, [&process, &output, &progress]() {
+        output += process.readAll();
+        const QString last = lastLines(output, 1);
+        if (!last.isEmpty()) {
+            progress.setLabelText("Making the working copy of Fallout 2...\n" + last.left(90));
+        }
+    });
+    QEventLoop loop;
+    connect(&process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), &loop, &QEventLoop::quit);
+    connect(&process, &QProcess::errorOccurred, &loop, [&loop](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart) {
+            loop.quit();
+        }
+    });
+    QTimer::singleShot(40 * 60 * 1000, &loop, &QEventLoop::quit);
+    process.start();
+    loop.exec();
+    if (process.state() != QProcess::NotRunning) {
+        process.kill();
+        process.waitForFinished(3000);
+    }
+    output += process.readAll();
+    progress.close();
+    busy = false;
+
+    const bool made = QFileInfo::exists(QDir(base).filePath("master.dat"));
+    spdlog::info("Mod tools: working copy from {} -> {}", folder.toStdString(), made ? "made" : "failed");
+    if (!made) {
+        QString detail = lastLines(output, 10);
+        if (detail.isEmpty()) {
+            detail = process.errorString();
+        }
+        QtDialogs::showWarning(parent, "Working Copy of Fallout 2",
+            QString("The working copy wasn't made:\n\n%1\n\nTo make it by hand, open a Command Prompt in %2 and run:\n"
+                    "python setup.py --build-base")
+                .arg(detail, QDir::toNativeSeparators(toQString(_root))));
+    }
+    return made;
 }
 
 QStringList ModToolsRunner::missingPackages(const ModToolResult& result) {

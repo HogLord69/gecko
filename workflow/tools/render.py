@@ -213,6 +213,25 @@ def hex_xy_screen(tile: int) -> tuple[int, int]:
 
 # ---------------------------------------------------------------------- render
 
+# Where the engine draws a square's floor and roof tiles against the hexes: tile.cc tileSetCenter
+# puts the square grid's origin at the hex grid's minus (16, 2) (_square_offx = _tile_offx - 16,
+# _square_offy = _tile_offy - 2), and square_xy() above is the hex grid's origin. Checked over the
+# whole grid against tile.cc's tileToScreenXY and squareTileToScreenXY (2026-11-18). Before that
+# fix every floor and roof in these pictures stood 16 px right and 2 px low of the walls.
+TILE_DX, TILE_DY = -16, -2
+ROOF_DY = -96                   # tile.cc squareTileToRoofScreenXY: a roof tile 96 px above its square
+
+
+def _blit(canvas: Image.Image, img: Image.Image, x: int, y: int) -> None:
+    """alpha_composite that takes a place partly off the canvas's top or left."""
+    if x < 0 or y < 0:
+        if x + img.width <= 0 or y + img.height <= 0:
+            return
+        img = img.crop((max(0, -x), max(0, -y), img.width, img.height))
+        x, y = max(0, x), max(0, y)
+    canvas.alpha_composite(img, (x, y))
+
+
 def render_map(gi: GameIndex, m: MapFile, elevation_index: int = 0,
                draw_objects: bool = True, roofs: bool = False) -> Image.Image:
     palette = load_palette(gi)
@@ -249,7 +268,7 @@ def render_map(gi: GameIndex, m: MapFile, elevation_index: int = 0,
         if img is None:
             continue
         x, y = square_xy(sq)
-        canvas.alpha_composite(img, (x - minx, y - miny))
+        _blit(canvas, img, x + TILE_DX - minx, y + TILE_DY - miny)
         drawn_tiles += 1
 
     drawn_objs = 0
@@ -270,6 +289,19 @@ def render_map(gi: GameIndex, m: MapFile, elevation_index: int = 0,
                 img,
                 (sx - img.width // 2 - minx, sy - (img.height - 1) - miny))
             drawn_objs += 1
+
+    if roofs:
+        # tile.cc squareTileToRoofScreenXY: a roof tile stands on its square, 96 px up, over everything
+        for sq, rid in enumerate(m.roofs[elevation_index]):
+            rid &= 0xFFF
+            if rid <= 1:
+                continue
+            img = art.tile(rid)
+            if img is None:
+                continue
+            x, y = square_xy(sq)
+            _blit(canvas, img, x + TILE_DX - minx, y + TILE_DY + ROOF_DY - miny)
+            drawn_tiles += 1
 
     print(f"  rendered elevation {elev}: {drawn_tiles} tiles, {drawn_objs} objects, "
           f"{W}x{H}px")
