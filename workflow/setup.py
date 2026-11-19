@@ -40,7 +40,7 @@ sys.path.insert(0, str(KIT / "tools"))
 from foclib import config  # noqa: E402
 
 REQUIRED_PY = (3, 10)
-PACKAGES = {"PIL": "pillow", "numpy": "numpy", "scipy": "scipy"}
+PACKAGES = {"PIL": "pillow", "numpy": "numpy", "scipy": "scipy", "cv2": "opencv-python-headless"}
 RELEASES = "https://github.com/HogLord69/gecko/releases/latest"
 
 # key -> (what it is, folder-name pattern, a file that proves it is that game)
@@ -186,7 +186,7 @@ def check_python(yes: bool, no_pip: bool) -> bool:
         except ImportError:
             missing.append(pkg)
     if not missing:
-        say("  packages (pillow, numpy, scipy): ok")
+        say("  packages (pillow, numpy, scipy, opencv): ok")
         return True
     say(f"  missing Python packages: {', '.join(missing)}")
     if no_pip:

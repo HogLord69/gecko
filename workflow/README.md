@@ -45,7 +45,7 @@ Game list (object palette) and in **File > Browse Maps**, and gets a launcher in
    python setup.py
    ```
 
-   It installs three Python packages (pillow, numpy, scipy), finds your games (press
+   It installs four Python packages (pillow, numpy, scipy, opencv-python-headless), finds your games (press
    Enter to accept what it finds, or type a folder), asks where `gecko.exe` is, and offers
    to make the **working copy**: a copy of Fallout 2 + RPU in `workflow\base` (about
    1.2 GB). Your real install is only read, and the copy step re-counts it afterwards and

@@ -326,14 +326,18 @@ def check_art_cap(gi, rep):
     cap, or the game draws an unrelated sprite where gecko shows the right one."""
     rep.section("4c art cap")
     import repack_art
-    used, counts = repack_art.collect_used(repack_art.Protos(), GameIndex(pristine=False))
+    used, stamped, counts = repack_art.collect_tiers(repack_art.Protos(), GameIndex(pristine=False))
     for art_dir, key in ids_mod.ART_KEY.items():
         start = ids_mod.FOC_START[key] - 1
         over = sorted(i for i in used[art_dir] if i >= ids_mod.ART_INDEX_CAP)
         if over:
-            rep.err(f"art/{art_dir}: {len(over)} used entr{'y' if len(over) == 1 else 'ies'} at "
+            rep.err(f"art/{art_dir}: {len(over)} entr{'y' if len(over) == 1 else 'ies'} used by maps or scripts at "
                     f"index >= {ids_mod.ART_INDEX_CAP} (e.g. {over[:5]}) - the game cannot "
                     f"address them. Run: python tools/repack_art.py")
+        s_over = sorted(i for i in stamped[art_dir] if i >= ids_mod.ART_INDEX_CAP)
+        if s_over:
+            rep.warn(f"art/{art_dir}: {len(s_over)} entr{'y' if len(s_over) == 1 else 'ies'} that only gecko stamps use "
+                     f"sit above {ids_mod.ART_INDEX_CAP}: placed on a map, run tools/repack_art.py")
         n_foc = sum(1 for i in used[art_dir] if i >= start)
         if n_foc and not over:
             rep.ok(f"art/{art_dir}: {n_foc} used mod entries, all below {ids_mod.ART_INDEX_CAP}")

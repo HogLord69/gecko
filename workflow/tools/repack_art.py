@@ -32,6 +32,13 @@ WHAT COUNTS AS USED
     through junctions in the patterns folder): frmPid and the proto's FID
   * every mod proto a script names by its PID_* define in scripts_src
 
+The maps and the scripts come first: the game draws their art. When there is not
+room below the cap for everything, art that only stamps use is moved above it to
+make room (2026-11-16: the Midland maps, lifted from Sonora, needed 69 places and
+the stamp library held all but 27); a stamp using such art draws wrong in the game
+until it is placed on a map and this tool runs again, as the gecko launchers do
+when gecko closes. tools/validate.py errors only on the first kind.
+
 WHAT GETS REWRITTEN
 -------------------
 Only swapped entries move; everything else keeps its index. Proto PIDs never
@@ -186,13 +193,24 @@ def script_pids() -> set[int]:
 
 
 def collect_used(protos: Protos, gi: GameIndex) -> tuple[dict[str, set[int]], dict[str, int]]:
+    """Everything used, maps, scripts and stamps alike."""
+    must, stamps, counts = collect_tiers(protos, gi)
+    return {d: must[d] | stamps[d] for d in must}, counts
+
+
+def collect_tiers(protos: Protos, gi: GameIndex):
+    """(what maps and scripts use, what only gecko stamps use, counts). The game draws the
+    first; the second only matters once a stamp is placed on a map, and placing it then makes
+    it the first kind on the next run."""
     used: dict[str, set[int]] = {d: set() for d in ART_KEY}
+    stamped: dict[str, set[int]] = {d: set() for d in ART_KEY}
     counts = {"maps": 0, "stamps": 0, "script_pids": 0}
 
-    def add_fid(fid):
+    def add_fid(fid, into=None):
+        into = used if into is None else into
         d = fid_dir(fid) if fid is not None else None
-        if d in used:
-            used[d].add(fid_index(fid))
+        if d in into:
+            into[d].add(fid_index(fid))
 
     for p in map_files():
         m = load_map(gi, p)
@@ -208,12 +226,12 @@ def collect_used(protos: Protos, gi: GameIndex) -> tuple[dict[str, set[int]], di
         counts["stamps"] += 1
         for v in d.get("variants", []):
             for o in v.get("objects", []):
-                add_fid(o["frmPid"])
-                add_fid(protos.fid(o["proPid"]))
+                add_fid(o["frmPid"], stamped)
+                add_fid(protos.fid(o["proPid"]), stamped)
     for pid in script_pids():
         counts["script_pids"] += 1
         add_fid(protos.fid(pid))
-    return used, counts
+    return used, {d: stamped[d] - used[d] for d in used}, counts
 
 
 # ------------------------------------------------------------------ registry
@@ -227,8 +245,12 @@ def registry_split(path: Path) -> tuple[list[str], list[int]]:
     return lines, entries
 
 
-def plan(used: dict[str, set[int]]) -> dict[str, list[tuple[int, int]]]:
-    """Per art dir, the (high, low) index pairs to swap."""
+def plan(must: dict[str, set[int]], stamped: dict[str, set[int]]) -> dict[str, list[tuple[int, int]]]:
+    """Per art dir, the (high, low) index pairs to swap. What maps and scripts use goes below
+    the cap first, into unused slots and then, if those run out, into slots that only gecko
+    stamps use (that art moves above the cap; a stamp using it draws wrong in the game until it
+    is placed on a map and this tool runs again, which is what the gecko launchers do when
+    gecko closes). Then what only stamps use comes down too, as far as unused slots go."""
     swaps: dict[str, list[tuple[int, int]]] = {}
     for d, key in ART_KEY.items():
         reg = IDS / f"{key}.txt"
@@ -237,13 +259,22 @@ def plan(used: dict[str, set[int]]) -> dict[str, list[tuple[int, int]]]:
         lines, entries = registry_split(reg)
         start = FOC_START[key] - 1          # art is 0-based: see port.py cmd_art
         idx = [start + k for k in range(len(entries))]
-        hi = [i for i in idx if i >= ART_INDEX_CAP and i in used[d]]
-        lo = [i for i in idx if i < ART_INDEX_CAP and i not in used[d]]
-        if len(hi) > len(lo):
-            sys.exit(f"art/{d}: {len(hi)} used entries above {ART_INDEX_CAP} but only "
-                     f"{len(lo)} unused slots below it - the used set itself no longer fits")
+        hi = [i for i in idx if i >= ART_INDEX_CAP and i in must[d]]
+        free = [i for i in idx if i < ART_INDEX_CAP and i not in must[d] and i not in stamped[d]]
+        evict = [i for i in idx if i < ART_INDEX_CAP and i in stamped[d]]
+        if len(hi) > len(free) + len(evict):
+            sys.exit(f"art/{d}: {len(hi)} entries used by maps or scripts above {ART_INDEX_CAP} but only "
+                     f"{len(free) + len(evict)} slots below it not used by one - the maps' art itself no longer fits")
         # lowest free slots first, so the region just under the cap stays compact
-        swaps[d] = list(zip(hi, lo))
+        pairs = list(zip(hi, free + evict[::-1]))
+        left = free[len(hi):]
+        stamps_hi = [i for i in idx if i >= ART_INDEX_CAP and i in stamped[d]]
+        pairs += list(zip(stamps_hi, left))
+        n_evict = max(0, len(hi) - len(free))
+        if n_evict:
+            print(f"  art/{d}: {n_evict} entr{'y' if n_evict == 1 else 'ies'} that only gecko stamps use "
+                  f"moved above {ART_INDEX_CAP} to make room for the maps' art")
+        swaps[d] = pairs
     return swaps
 
 
@@ -378,11 +409,12 @@ def main() -> int:
 
     gi = GameIndex(pristine=False)
     protos = Protos()
-    used, counts = collect_used(protos, gi)
+    must, stamped, counts = collect_tiers(protos, gi)
+    used = {d: must[d] | stamped[d] for d in must}
     print(f"scanned {counts['maps']} map files, {counts['stamps']} stamps, "
           f"{counts['script_pids']} script-named protos")
 
-    swaps = plan(used)
+    swaps = plan(must, stamped)
     table: dict[str, dict[int, int]] = {}
     for d, pairs in swaps.items():
         key = ART_KEY[d]

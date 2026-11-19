@@ -72,7 +72,7 @@ ARRIVE_IN = 220                 # px in from the box edge for an arrival
 KEEP_INSIDE = 64                # an old block this far inside the box is a hand-placed one: kept
 KEEP_ENTRANCE = 8               # an exit of this many hexes or fewer is an entrance: kept as it is
 FACING = {"bottom": 0, "top": 2, "left": 1, "right": 4}
-WORLD_START_MAPS = {"CLAIREMONT.MAP", "LAMESA.MAP"}   # entered from the world map at their start hex
+WORLD_START_MAPS = {"CLAIREMONT.MAP", "LAMESA.MAP", "MIDLAND.MAP"}   # entered from the world map at their start hex
 ROAD = ("road", "curb", "crbm", "line", "stop")
 
 

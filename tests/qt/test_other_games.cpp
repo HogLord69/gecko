@@ -5,10 +5,13 @@
 #include "support/Fixtures.h"
 #include "ui/panels/ObjectPalettePanel.h"
 #include "pattern/PatternLibrary.h"
+#include "ui/assets/ModToolsRunner.h"
 #include "ui/dialogs/MapBrowserDialog.h"
 #include "ui/dialogs/PatternBrowserDialog.h"
 
 #include <QDialogButtonBox>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QPushButton>
 
 #include <QCheckBox>
@@ -377,6 +380,47 @@ TEST_CASE("Without the mod tools another game's stamps are not passed off as the
 
     revealFolder(tree, bundled, "HogLord Props");
     CHECK(gameNote(dialog).isEmpty());
+}
+
+TEST_CASE("The mod tools' missing Python packages are read from their answer", "[qt][othergames]") {
+    geck::ModToolResult listed;
+    listed.json = QJsonObject{ { "ok", false }, { "missing", QJsonArray{ "numpy", "scipy" } }, { "python_path", "C:/Py/python.exe" } };
+    CHECK(geck::ModToolsRunner::missingPackages(listed) == QStringList{ "numpy", "scipy" });
+
+    // Python stopped on an import before the tools could answer: the package is in the error text.
+    const geck::ModToolResult bare = geck::ModToolsRunner::parseOutput(1, QByteArray(),
+        "Traceback (most recent call last):\n  File \"x.py\", line 1\nModuleNotFoundError: No module named 'PIL'\n");
+    CHECK(geck::ModToolsRunner::missingPackages(bare) == QStringList{ "pillow" });
+
+    const geck::ModToolResult opencv = geck::ModToolsRunner::parseOutput(1, QByteArray(),
+        "ModuleNotFoundError: No module named 'cv2'\n");
+    CHECK(geck::ModToolsRunner::missingPackages(opencv) == QStringList{ "opencv-python-headless" });
+
+    const geck::ModToolResult other = geck::ModToolsRunner::parseOutput(1, QByteArray(),
+        "ModuleNotFoundError: No module named 'yaml'\n");
+    CHECK(geck::ModToolsRunner::missingPackages(other).isEmpty()); // not one the tools need: not offered
+
+    geck::ModToolResult fine;
+    fine.ok = true;
+    fine.json = QJsonObject{ { "ok", true } };
+    CHECK(geck::ModToolsRunner::missingPackages(fine).isEmpty());
+}
+
+TEST_CASE("A tools answer of missing packages comes back as it is when no one can be asked", "[qt][othergames]") {
+    QTemporaryDir root;
+    REQUIRE(root.isValid());
+    const std::filesystem::path tools = std::filesystem::path(root.path().toStdU16String()) / "tools";
+    write(tools / "gecko_assets.py",
+        "import json, sys\n"
+        "print(json.dumps({'ok': False, 'missing': ['numpy'], 'python_path': sys.executable,"
+        " 'error': 'no numpy'}))\n");
+    geck::ModToolsRunner runner(std::filesystem::path(root.path().toStdU16String()), "python");
+    const geck::ModToolResult result = runner.runAndWait({ "info" }, 60000);
+    if (result.json.isEmpty()) {
+        SKIP("no python on this machine's PATH: " + result.error.toStdString());
+    }
+    CHECK_FALSE(result.ok); // off screen nobody can answer the offer, so nothing is installed or re-run
+    CHECK(geck::ModToolsRunner::missingPackages(result) == QStringList{ "numpy" });
 }
 
 TEST_CASE("Browse Maps offers the other games, and only looks at their maps", "[qt][othergames]") {

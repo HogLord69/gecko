@@ -413,11 +413,23 @@ def render_preview(gi: GameIndex, pal, piece: dict, out: Path) -> dict:
 
 # ------------------------------------------------------------------------------ commands
 
+# What the tools need besides Python itself (setup.py installs them). An answer that lists them under
+# "missing", with "python_path", lets gecko offer to install them with that same Python.
+PACKAGES = {"PIL": "pillow", "numpy": "numpy", "scipy": "scipy", "cv2": "opencv-python-headless"}
+
+
+def missing_packages() -> list[str]:
+    import importlib.util
+    return [pkg for mod, pkg in PACKAGES.items() if importlib.util.find_spec(mod) is None]
+
+
 def cmd_info(_args) -> dict:
     return {
         "root": str(ROOT),
         "deployed": str(DEPLOYED),
         "python": sys.version.split()[0],
+        "python_path": sys.executable,
+        "missing": missing_packages(),
         "games_running": games_running(),
         "browse_session": BROWSE_MARKER.exists(),
         "pending": len(read_pending()),
@@ -1420,6 +1432,13 @@ def main() -> int:
                 "sources": cmd_sources, "source": cmd_source, "port": cmd_port,
                 "stamp-games": cmd_stamp_games, "stamp-convert": cmd_stamp_convert,
                 "building-preview": cmd_building_preview, "building-create": cmd_building_create}
+    missing = missing_packages() if args.cmd != "info" else []
+    if missing:
+        result = {"ok": False, "missing": missing, "python_path": sys.executable,
+                  "error": f"The Python running the map tools ({sys.executable}) doesn't have {', '.join(missing)}, "
+                           f"which they need. Install them with: \"{sys.executable}\" -m pip install {' '.join(missing)}"}
+        print(json.dumps(result))
+        return 1
     try:
         result = {"ok": True, **handlers[args.cmd](args)}
     except Refused as e:
@@ -1428,6 +1447,8 @@ def main() -> int:
         result = {"ok": False, "error": str(e.code) if e.code not in (None, 0) else "stopped"}
     except Exception as e:                                      # noqa: BLE001 - gecko shows it
         result = {"ok": False, "error": f"{type(e).__name__}: {e}", "trace": traceback.format_exc()}
+        if isinstance(e, ModuleNotFoundError) and e.name in PACKAGES:
+            result.update(missing=[PACKAGES[e.name]], python_path=sys.executable)
     print(json.dumps(result))
     return 0 if result["ok"] else 1
 
