@@ -1,0 +1,3 @@
+# Names and examine text for items, critters and scenery, applied by tools/scenery_text.py
+# (gecko's Name and Examine Text writes here). Each row: pid<TAB>name<TAB>examine text,
+# then any notes. Rows of one type with the same name must carry the same text.

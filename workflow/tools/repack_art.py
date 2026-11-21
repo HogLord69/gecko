@@ -238,6 +238,8 @@ def collect_tiers(protos: Protos, gi: GameIndex):
 
 def registry_split(path: Path) -> tuple[list[str], list[int]]:
     """(all lines, positions of entry lines) - comment lines keep their place."""
+    if not path.is_file():                  # a new mod has not started this one yet
+        return [], []
     lines = path.read_text(encoding="utf-8").splitlines()
     entries = [i for i, l in enumerate(lines) if not l.strip().startswith("#")]
     while entries and not lines[entries[-1]].strip():

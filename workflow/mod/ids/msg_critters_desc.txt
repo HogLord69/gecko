@@ -1,0 +1,2 @@
+# Examine text for the critters names in msg_critters.txt, keyed by name:
+# name<TAB>examine text

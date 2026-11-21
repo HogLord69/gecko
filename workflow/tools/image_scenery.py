@@ -52,6 +52,13 @@ like this color change for the sign".
    north of the object's (tile - 200, the same x and one row up): the
    engine draws that hex first, so the object covers the part of the
    shadow behind it, as the pole hides the Pep Gas sign's.
+7. Cast shadow (--cast PNG): a 3D model's own shadow, rendered alone on the
+   same canvas as the picture (blender_statue.py shadow=1: the game's sun,
+   the shadow behind the piece, up the screen and a little right), drawn into
+   the sprite in palette 207, the near-black of the vanilla scenery's baked
+   shadows (the crosses, trees, posts and street lights), wherever the piece
+   itself does not cover it. The frame grows to hold it; --stand keeps the
+   foot on the hex.
 
 The protos are byte copies of --proto / --shadow-proto with PID and FID
 repointed (as mirror_scenery.py does), appended to the ID registry and to
@@ -203,6 +210,39 @@ def build(img: Image.Image, height: int, ref, pal, quant, white, sat, grain, rim
     return out
 
 
+CAST_COLOUR = 207                           # the vanilla baked shadows' near-black (12, 12, 12)
+
+
+def add_cast(idx: np.ndarray, path: Path, colour: int = CAST_COLOUR) -> np.ndarray:
+    """The shadow render's alpha, brought onto the sprite's grid (the same crop and scale as the
+    picture), drawn in `colour` under the piece; the frame is widened to hold it and CROP moved
+    with it, so anchor_at still finds the source pixel."""
+    a = np.asarray(Image.open(path).convert("RGBA"))[..., 3].astype(np.float32) / 255.0
+    x0, y0, s = CROP["x0"], CROP["y0"], CROP["s"]
+    ys, xs = np.nonzero(a > 0.02)
+    h, w = idx.shape
+    if len(xs) == 0:
+        return idx
+    left, right = int(np.floor((xs.min() - x0) * s)) - 1, int(np.ceil((xs.max() + 1 - x0) * s)) + 1
+    top, bottom = int(np.floor((ys.min() - y0) * s)) - 1, int(np.ceil((ys.max() + 1 - y0) * s)) + 1
+    pl, pt, pr, pb = max(0, -left), max(0, -top), max(0, right - w), max(0, bottom - h)
+    k = max(1, int(round(1 / s)))
+    a = cv2.blur(a, (k, k))                         # an area average before sampling at the sprite's size
+    W, H = w + pl + pr, h + pt + pb
+    m = np.float32([[1 / s, 0, x0 - pl / s + 0.5 / s - 0.5], [0, 1 / s, y0 - pt / s + 0.5 / s - 0.5]])
+    small = cv2.warpAffine(a, m, (W, H), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP, borderValue=0)
+    out = np.zeros((H, W), np.uint8)
+    out[pt:pt + h, pl:pl + w] = idx
+    out[(small >= 0.5) & (out == 0)] = colour
+    CROP.update(x0=x0 - pl / s, y0=y0 - pt / s)
+    # trim rows and columns left empty
+    ys, xs = np.nonzero(out)
+    out = out[:ys.max() + 1, :xs.max() + 1]
+    t, l = ys.min(), xs.min()
+    CROP.update(x0=CROP["x0"] + l / s, y0=CROP["y0"] + t / s)
+    return out[t:, l:]
+
+
 def anchor(idx: np.ndarray) -> tuple[int, int]:
     """Header offsets that put the bottom centre of the lowest opaque row on the hex."""
     h, w = idx.shape
@@ -293,6 +333,8 @@ def write_piece(name, idx, xo, yo, src_proto: int, gi, note):
     proto_file = f"{pid_idx:08d}.pro"
     if (PROTO / proto_file).exists() or (ART / name).exists():
         sys.exit(f"{proto_file} or {name} already exists")
+    ART.mkdir(parents=True, exist_ok=True)                  # a new mod has neither folder yet
+    PROTO.mkdir(parents=True, exist_ok=True)
     (ART / name).write_bytes(data)
     (PROTO / proto_file).write_bytes(bytes(proto))
     with open(IDS / "art_scenery.txt", "a", newline="\r\n") as fh:     # the registry is CRLF
@@ -316,6 +358,8 @@ def main() -> int:
     ap.add_argument("--ref", default="GASSIGN1.FRM,GASSIGN3.FRM", help="reference scenery FRMs for the shading")
     ap.add_argument("--proto", type=lambda s: int(s, 0), default=0x020004DE, help="proto to copy (Pep Gas sign)")
     ap.add_argument("--shadow", help="also make a ground shadow piece with this art name")
+    ap.add_argument("--cast", type=Path, help="a render of the piece's shadow alone (blender_statue.py shadow=1), "
+                                               "drawn into the sprite")
     ap.add_argument("--shadow-proto", type=lambda s: int(s, 0), default=0x020004DF)
     ap.add_argument("--white", type=int, default=150, help="background: darkest channel at least this")
     ap.add_argument("--sat", type=int, default=28, help="background: channel spread at most this")
@@ -343,6 +387,8 @@ def main() -> int:
     idx = build(Image.open(args.image), args.height, ref, pal, quant,
                 args.white, args.sat, args.grain, args.rim, args.seed,
                 args.radius, args.falloff, args.ao, args.match_amount, args.chroma, args.scale)
+    if args.cast:
+        idx = add_cast(idx, args.cast)
     if args.stand:
         xo, yo = anchor_at(idx, *map(float, args.stand.split(",")))
     else:

@@ -1,0 +1,2 @@
+# Wall art (art/walls). First line = FOC_START['art_walls'] (tools/ids.py).
+# Each line is a file name, e.g. mywall.frm, 12 characters at most.

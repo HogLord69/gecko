@@ -1,0 +1,2 @@
+# Your mod's critters protos. First line = FOC_START['proto_critters'] (tools/ids.py).
+# Each line is the .pro file name, e.g. 00000700.pro

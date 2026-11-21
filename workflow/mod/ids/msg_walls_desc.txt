@@ -1,0 +1,2 @@
+# Examine text for the walls names in msg_walls.txt, keyed by name:
+# name<TAB>examine text

@@ -1,0 +1,2 @@
+# Item art (art/items). First line = FOC_START['art_items'] (tools/ids.py).
+# Each line is a file name, e.g. myitem.frm, 12 characters at most.

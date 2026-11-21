@@ -1,0 +1,2 @@
+# Critter art (art/critters). First line = FOC_START['art_critters'] (tools/ids.py).
+# Each line is an art prefix and its flags as critters.lst has them, e.g. mycrit,11, 12 characters at most.
