@@ -1,0 +1,2 @@
+# Examine text for the items names in msg_items.txt, keyed by name:
+# name<TAB>examine text

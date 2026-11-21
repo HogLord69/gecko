@@ -1,0 +1,2 @@
+# Scenery art (art/scenery). First line = FOC_START['art_scenery'] (tools/ids.py).
+# Each line is a file name, e.g. mysign.frm, 12 characters at most.

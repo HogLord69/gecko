@@ -38,8 +38,13 @@ ART = ROOT / "mod" / "data" / "art" / "scenery"
 PROTO = ROOT / "mod" / "data" / "proto" / "scenery"
 
 
+def registry_text(path: Path) -> str:
+    """A registry's text. One a new mod has not started yet reads as empty."""
+    return path.read_text() if path.is_file() else ""
+
+
 def next_index(path: Path, start: int) -> int:
-    return start + sum(1 for line in path.read_text().splitlines() if not line.startswith("#"))
+    return start + sum(1 for line in registry_text(path).splitlines() if not line.startswith("#"))
 
 
 def mirror(data: bytes) -> bytes:
@@ -64,7 +69,7 @@ def main() -> int:
 
     name = args.art_name.lower()
     check_art_name("scenery", name)
-    if (ART / name).exists() or name in (IDS / "art_scenery.txt").read_text().lower().split():
+    if (ART / name).exists() or name in registry_text(IDS / "art_scenery.txt").lower().split():
         sys.exit(f"{name} already exists")
     gi = GameIndex(pristine=False)
     pr = gi.proto(args.pid)
@@ -98,6 +103,8 @@ def main() -> int:
     if args.write:
         if (PROTO / proto_file).exists():
             sys.exit(f"{proto_file} already exists")
+        ART.mkdir(parents=True, exist_ok=True)              # a new mod has neither folder yet
+        PROTO.mkdir(parents=True, exist_ok=True)
         (ART / name).write_bytes(flipped)
         (PROTO / proto_file).write_bytes(bytes(proto_bytes))
         with open(IDS / "art_scenery.txt", "a", newline="\r\n") as fh:     # the registry is CRLF

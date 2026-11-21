@@ -158,7 +158,8 @@ class Refused(Exception):
 def scenery_names_taken(gi: GameIndex) -> set[str]:
     """Every scenery art file name the game sees, plus the mod's registered and written ones."""
     taken = {n.lower() for n in parse_lst(gi.vfs.read("art\\scenery\\scenery.lst"))}
-    taken |= {l.strip().lower() for l in (IDS / "art_scenery.txt").read_text().splitlines()
+    reg = IDS / "art_scenery.txt"                    # a new mod has none yet
+    taken |= {l.strip().lower() for l in (reg.read_text() if reg.is_file() else "").splitlines()
               if l.strip() and not l.startswith("#")}
     if ART.is_dir():
         taken |= {p.name.lower() for p in ART.iterdir()}

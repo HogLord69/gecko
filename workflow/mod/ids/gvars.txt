@@ -1,0 +1,3 @@
+# Your mod's global variables. First line = slot FOC_START['gvar'] (tools/ids.py).
+# Names only, e.g. GVAR_MY_QUEST: the engine numbers them by position.
+# A blank line is a retired slot: it keeps its index so later slots do not shift.

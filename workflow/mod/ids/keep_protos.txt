@@ -1,0 +1,2 @@
+# Protos made to be placed on maps; tools/repack_art.py keeps their art below the cap.
+# Each line is a pid and what it is, e.g. 0x02000A00  # my sign

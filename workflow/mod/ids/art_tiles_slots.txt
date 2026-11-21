@@ -1,0 +1,2 @@
+# New floor and roof tiles in spare lines of the base tiles.lst (tools/tile_slots.py).
+# <tile id>,<file in art/tiles>. Never reorder or reuse a line: maps and stamps hold these ids.

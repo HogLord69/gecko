@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from foclib import GameIndex, parse_lst  # noqa: E402
 from ids import FOC_START, check_art_name  # noqa: E402
-from mirror_scenery import ART, IDS, PROTO, next_index  # noqa: E402
+from mirror_scenery import ART, IDS, PROTO, next_index, registry_text  # noqa: E402
 from replace_pc_from_ref import decode_frm, encode_frm  # noqa: E402
 from scale_critter import FIXED, Quant, load_palette  # noqa: E402
 
@@ -160,7 +160,7 @@ def main() -> int:
 
     name = args.art_name.lower()
     check_art_name("scenery", name)
-    if (ART / name).exists() or name in (IDS / "art_scenery.txt").read_text().lower().split():
+    if (ART / name).exists() or name in registry_text(IDS / "art_scenery.txt").lower().split():
         sys.exit(f"{name} already exists")
     gi = GameIndex(pristine=False)
     pr = gi.proto(args.pid)
@@ -197,6 +197,8 @@ def main() -> int:
     if args.write:
         if (PROTO / proto_file).exists():
             sys.exit(f"{proto_file} already exists")
+        ART.mkdir(parents=True, exist_ok=True)              # a new mod has neither folder yet
+        PROTO.mkdir(parents=True, exist_ok=True)
         (ART / name).write_bytes(scaled)
         (PROTO / proto_file).write_bytes(bytes(proto_bytes))
         with open(IDS / "art_scenery.txt", "a", newline="\r\n") as fh:     # the registry is CRLF

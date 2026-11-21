@@ -251,7 +251,9 @@ class MapBuilder:
             o.frame,
             o.rotation,
             o.fid,
-            o.flags,
+            # never OBJECT_NO_SAVE (0x4): Fallout 2's protos of six ammo kinds hold junk flags
+            # (0xFFFFEFFF), and a box carrying the bit breaks the map's saved copy (map_fixup no-save)
+            o.flags & ~0x4,
             o.elevation,
             o.pid,
             -1,                # cid (-1 in 100% of real objects)

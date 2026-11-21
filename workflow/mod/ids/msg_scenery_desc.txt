@@ -1,0 +1,2 @@
+# Examine text for the scenery names in msg_scenery.txt, keyed by name:
+# name<TAB>examine text

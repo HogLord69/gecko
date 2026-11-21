@@ -1,0 +1,2 @@
+# Talking-head art (art/heads). First line = FOC_START['art_heads'] (tools/ids.py).
+# Each line is a head as heads.lst has it, 12 characters at most.

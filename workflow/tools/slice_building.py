@@ -99,7 +99,7 @@ import image_scenery as isc  # noqa: E402
 import tile_slots as ts  # noqa: E402
 from foclib import GameIndex, parse_lst  # noqa: E402
 from ids import ENGINE_ART_NAME_MAX, FOC_START  # noqa: E402
-from mirror_scenery import next_index  # noqa: E402
+from mirror_scenery import next_index, registry_text  # noqa: E402
 from replace_pc_from_ref import decode_frm, encode_frm, load_8bit_palette  # noqa: E402
 from scale_critter import FIXED  # noqa: E402
 
@@ -569,7 +569,7 @@ def preview(gi: GameIndex, pal, pieces, roof, out: Path) -> dict:
 
 def wall_names_taken(gi: GameIndex) -> set[str]:
     taken = {n.split(",")[0].strip().lower() for n in parse_lst(gi.vfs.read("art\\walls\\walls.lst"))}
-    taken |= {l.strip().lower() for l in (IDS / "art_walls.txt").read_text().splitlines()
+    taken |= {l.strip().lower() for l in registry_text(IDS / "art_walls.txt").splitlines()
               if l.strip() and not l.startswith("#")}
     if ART.is_dir():
         taken |= {p.name.lower() for p in ART.iterdir()}
