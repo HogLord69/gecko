@@ -4,6 +4,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QEventLoop>
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QPushButton>
@@ -22,6 +23,7 @@
 #include <QWidget>
 #include <spdlog/spdlog.h>
 
+#include "resource/WritableDataRoot.h"
 #include "ui/QtDialogs.h"
 
 #include <algorithm>
@@ -78,6 +80,26 @@ namespace {
     }
 #endif
 
+    /// A path from the tools' config.json as the tools read it (tools/foclib/config.py): ~ is the home
+    /// folder, and each %VARIABLE% that is set is replaced (one that isn't stays as written).
+    QString expandUserPath(const QString& text) {
+        static const QRegularExpression variable(QStringLiteral("%([^%]+)%"));
+        QString out;
+        qsizetype from = 0;
+        for (auto it = variable.globalMatch(text); it.hasNext();) {
+            const QRegularExpressionMatch match = it.next();
+            const QByteArray name = match.captured(1).toUtf8();
+            out += text.mid(from, match.capturedStart() - from);
+            out += qEnvironmentVariableIsSet(name.constData()) ? qEnvironmentVariable(name.constData()) : match.captured(0);
+            from = match.capturedEnd();
+        }
+        out += text.mid(from);
+        if (out == u'~' || out.startsWith(QStringLiteral("~/")) || out.startsWith(QStringLiteral("~\\"))) {
+            out = QDir::homePath() + out.mid(1);
+        }
+        return out;
+    }
+
     QString lastLines(const QByteArray& text, int count) {
         QStringList lines = QString::fromUtf8(text).split(u'\n', Qt::SkipEmptyParts);
         if (lines.size() > count) {
@@ -129,6 +151,56 @@ std::filesystem::path ModToolsRunner::resolveRoot(const std::filesystem::path& c
         return configured;
     }
     return detectRootAboveApplication();
+}
+
+std::filesystem::path ModToolsRunner::deployedModFolder(const std::filesystem::path& root) {
+    if (root.empty()) {
+        return {};
+    }
+    std::filesystem::path base = root / "base";
+    QFile config(toQString(root / "config.json"));
+    if (config.open(QIODevice::ReadOnly)) {
+        const QString configured = expandUserPath(
+            QJsonDocument::fromJson(config.readAll()).object().value("base").toString().trimmed());
+        if (!configured.isEmpty()) {
+            const std::filesystem::path path(configured.toStdU16String());
+            base = path.is_absolute() ? path : root / path;
+        }
+    }
+    const std::filesystem::path deployed = (base / "mods" / "foc").lexically_normal();
+    std::error_code ec;
+    return std::filesystem::is_directory(deployed, ec) ? deployed : std::filesystem::path{};
+}
+
+std::vector<std::filesystem::path> ModToolsRunner::withDeployedMod(std::vector<std::filesystem::path> dataPaths,
+    const std::filesystem::path& root, bool browsingAnotherGame) {
+    if (browsingAnotherGame) {
+        return dataPaths;
+    }
+    const std::filesystem::path deployed = deployedModFolder(root);
+    if (deployed.empty()) {
+        return dataPaths;
+    }
+    const bool mounted = std::any_of(dataPaths.begin(), dataPaths.end(),
+        [&deployed](const std::filesystem::path& path) { return resource::sameDataPathEntry(path, deployed); });
+    if (!mounted) {
+        dataPaths.push_back(deployed);
+    }
+    return dataPaths;
+}
+
+std::vector<std::filesystem::path> ModToolsRunner::withToolsData(std::vector<std::filesystem::path> dataPaths,
+    const std::filesystem::path& root, bool browsingAnotherGame) {
+    if (root.empty() || browsingAnotherGame) {
+        return dataPaths;
+    }
+    dataPaths = withDeployedMod(std::move(dataPaths), root, false);
+    const std::filesystem::path overlay = root / "build" / "gecko_assets" / "overlay";
+    std::error_code ec;
+    if (std::filesystem::is_directory(overlay, ec)) {
+        dataPaths.push_back(overlay);
+    }
+    return dataPaths;
 }
 
 QStringList ModToolsRunner::scriptArguments(const QStringList& args) const {

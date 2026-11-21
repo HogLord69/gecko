@@ -8,6 +8,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <vector>
 
 class QProcess;
 
@@ -45,6 +46,24 @@ public:
     /// The mod folder the Tools menu uses: @p configured (Preferences > Mod Tools) when it holds
     /// the script, else the one found above gecko.exe, else empty.
     static std::filesystem::path resolveRoot(const std::filesystem::path& configured);
+
+    /// The folder the map workflow's deploy (Apply New Art) writes the mod into: <working copy>/mods/foc,
+    /// the working copy being config.json's "base" (a relative one is under @p root) or @p root/base.
+    /// Empty when @p root is empty or nothing has been deployed yet.
+    static std::filesystem::path deployedModFolder(const std::filesystem::path& root);
+    /// @p dataPaths with the deployed mod mounted last, on top of the game, so what Apply New Art put in
+    /// (new pieces, roof tiles in spare tile lines) draws whichever game folder Preferences names.
+    /// Unchanged when nothing is deployed, when a data path already mounts it (a profile that puts the
+    /// mod among folders of its own), or when @p browsingAnotherGame: the mod's lists would replace
+    /// that game's.
+    static std::vector<std::filesystem::path> withDeployedMod(std::vector<std::filesystem::path> dataPaths,
+        const std::filesystem::path& root, bool browsingAnotherGame);
+    /// What gecko mounts from the tools on top of @p dataPaths: the deployed mod (withDeployedMod), then
+    /// the overlay of pieces brought in from other games since that deploy (root/build/gecko_assets/
+    /// overlay, which the next deploy removes), so both draw after a restart. Kept in memory, never
+    /// saved as data paths; nothing while @p browsingAnotherGame.
+    static std::vector<std::filesystem::path> withToolsData(std::vector<std::filesystem::path> dataPaths,
+        const std::filesystem::path& root, bool browsingAnotherGame);
 
     [[nodiscard]] const std::filesystem::path& root() const { return _root; }
     [[nodiscard]] const QString& python() const { return _python; }

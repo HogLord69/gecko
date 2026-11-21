@@ -6,6 +6,7 @@
 #include "ui/panels/ObjectPalettePanel.h"
 #include "pattern/PatternLibrary.h"
 #include "ui/assets/ModToolsRunner.h"
+#include "ui/Settings.h"
 #include "ui/dialogs/MapBrowserDialog.h"
 #include "ui/dialogs/PatternBrowserDialog.h"
 
@@ -17,6 +18,8 @@
 #include <QCheckBox>
 #include <QDir>
 #include <QDirIterator>
+#include <QFile>
+#include <QStandardPaths>
 #include <QFileInfo>
 #include <QFileSystemModel>
 #include <QSortFilterProxyModel>
@@ -495,4 +498,98 @@ TEST_CASE("Someone with no stamps of their own opens the Pattern Library on Fall
     CHECK(currentFolderName(tree) == "Fallout 2");
     CHECK(tree->isExpanded(tree->currentIndex()));
     CHECK(gridNames(grid).contains("Buildings"));
+}
+
+// What Apply New Art deployed is mounted on top of the game Preferences names, so a building's walls and
+// the roof tiles in spare tile lines draw instead of whatever those lines held before.
+TEST_CASE("gecko mounts the mod the tools deployed on top of the game", "[qt][othergames]") {
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+    const std::filesystem::path dir(temp.path().toStdU16String());
+    const std::filesystem::path kit = dir / "workflow";
+    const std::filesystem::path game = dir / "Fallout 2";
+    std::filesystem::create_directories(game);
+    write(kit / "tools" / "gecko_assets.py", "\n");
+    const std::vector<std::filesystem::path> paths{ game };
+
+    // nothing deployed yet: nothing to mount
+    CHECK(geck::ModToolsRunner::deployedModFolder(kit).empty());
+    CHECK(geck::ModToolsRunner::withDeployedMod(paths, kit, false) == paths);
+
+    const std::filesystem::path deployed = kit / "base" / "mods" / "foc";
+    std::filesystem::create_directories(deployed);
+    CHECK(geck::ModToolsRunner::deployedModFolder(kit) == deployed.lexically_normal());
+    const auto mounted = geck::ModToolsRunner::withDeployedMod(paths, kit, false);
+    REQUIRE(mounted.size() == 2);
+    CHECK(mounted.front() == game);
+    CHECK(mounted.back() == deployed.lexically_normal()); // last: it wins over the game
+
+    // a profile that already mounts it keeps its own order, however the path is spelled
+    const std::vector<std::filesystem::path> profile{ game, kit / "base" / "mods" / ".." / "mods" / "foc", dir / "maps" };
+    CHECK(geck::ModToolsRunner::withDeployedMod(profile, kit, false) == profile);
+
+    // another game being browsed: the mod's lists would replace that game's
+    CHECK(geck::ModToolsRunner::withDeployedMod(paths, kit, true) == paths);
+    CHECK(geck::ModToolsRunner::withDeployedMod(paths, {}, false) == paths);
+}
+
+TEST_CASE("The deployed mod is found where config.json puts the working copy", "[qt][othergames]") {
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+    const std::filesystem::path dir(temp.path().toStdU16String());
+    const std::filesystem::path kit = dir / "workflow";
+    write(kit / "tools" / "gecko_assets.py", "\n");
+    std::filesystem::create_directories(kit / "base" / "mods" / "foc"); // the default, not used once config names another
+
+    write(kit / "config.json", R"({"fallout2": "", "base": "copies/fo2"})");
+    CHECK(geck::ModToolsRunner::deployedModFolder(kit).empty()); // nothing deployed in the one config names
+    std::filesystem::create_directories(kit / "copies" / "fo2" / "mods" / "foc");
+    CHECK(geck::ModToolsRunner::deployedModFolder(kit) == (kit / "copies" / "fo2" / "mods" / "foc").lexically_normal());
+
+    const std::filesystem::path elsewhere = dir / "Working Copy";
+    std::filesystem::create_directories(elsewhere / "mods" / "foc");
+    qputenv("GECKO_TEST_WORKING_COPY", QString::fromStdU16String(elsewhere.u16string()).toUtf8());
+    write(kit / "config.json", R"({"base": "%GECKO_TEST_WORKING_COPY%"})");
+    CHECK(geck::ModToolsRunner::deployedModFolder(kit) == (elsewhere / "mods" / "foc").lexically_normal());
+    qunsetenv("GECKO_TEST_WORKING_COPY");
+
+    write(kit / "config.json", R"({"base": ""})"); // empty: the working copy in the kit
+    CHECK(geck::ModToolsRunner::deployedModFolder(kit) == (kit / "base" / "mods" / "foc").lexically_normal());
+}
+
+TEST_CASE("The tools' overlay goes on top of the deployed mod, and neither over another game", "[qt][othergames]") {
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+    const std::filesystem::path dir(temp.path().toStdU16String());
+    const std::filesystem::path kit = dir / "workflow";
+    const std::filesystem::path game = dir / "Fallout 2";
+    std::filesystem::create_directories(game);
+    write(kit / "tools" / "gecko_assets.py", "\n");
+    std::filesystem::create_directories(kit / "base" / "mods" / "foc");
+    std::filesystem::create_directories(kit / "build" / "gecko_assets" / "overlay");
+    const std::vector<std::filesystem::path> paths{ game };
+
+    const auto all = geck::ModToolsRunner::withToolsData(paths, kit, false);
+    REQUIRE(all.size() == 3);
+    CHECK(all[1] == (kit / "base" / "mods" / "foc").lexically_normal());
+    CHECK(all[2] == kit / "build" / "gecko_assets" / "overlay");
+    CHECK(geck::ModToolsRunner::withToolsData(paths, kit, true) == paths);
+    CHECK(geck::ModToolsRunner::withToolsData(paths, {}, false) == paths);
+}
+
+TEST_CASE("Settings know when a launcher has gecko open on another game", "[qt][othergames]") {
+    // the launcher keeps the mod's own settings beside gecko's as settings.json.foc-live (test-mode paths here)
+    const QString marker = QDir(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation))
+                               .filePath(QStringLiteral("gecko/settings.json.foc-live"));
+    QFile::remove(marker);
+    geck::Settings settings;
+    CHECK_FALSE(settings.isBrowsingAnotherGame());
+    QDir().mkpath(QFileInfo(marker).absolutePath());
+    {
+        QFile file(marker);
+        REQUIRE(file.open(QIODevice::WriteOnly));
+    }
+    CHECK(settings.isBrowsingAnotherGame());
+    QFile::remove(marker);
+    CHECK_FALSE(settings.isBrowsingAnotherGame());
 }

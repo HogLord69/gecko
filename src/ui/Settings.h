@@ -109,6 +109,9 @@ public:
     void setModToolsRoot(const std::filesystem::path& root);
     QString getPythonExecutable() const; // "python" (from PATH) when unset
     void setPythonExecutable(const QString& python);
+    // True while a map workflow launcher (its tools/gecko_browse) has gecko open on another game: the
+    // launcher keeps the mod's own settings beside these, as settings.json.foc-live, until it closes.
+    bool isBrowsingAnotherGame() const;
 
     // Game location configuration
     std::filesystem::path getGameLocation() const;

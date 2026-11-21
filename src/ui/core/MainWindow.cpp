@@ -1655,6 +1655,9 @@ void MainWindow::rebuildGameResourcesFromSettings() {
     // Same fallback as Application::loadDataPaths: the bundled resources must survive a data-path
     // change, or every later map load fails on editor art the game data does not ship.
     util::ensureFallbackDataPath(dataPaths, Application::getResourcesPath());
+    // and what the mod tools mount on top (their deployed mod and overlay), as at startup
+    dataPaths = ModToolsRunner::withToolsData(std::move(dataPaths), ModToolsRunner::resolveRoot(_settings->getModToolsRoot()),
+        _settings->isBrowsingAnotherGame());
 
     if (hasActiveMap()) {
         closeCurrentMap();

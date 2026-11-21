@@ -112,8 +112,10 @@ place's layout from OpenStreetMap to base it on. See
 Two ways, and most maps use both:
 
 * **In gecko:** `python foc.py edit` opens gecko on your mod (your working copy plus
-  anything you've deployed). Make a new map, lay ground, stamp buildings, place scenery.
-  Save it to `workflow\mod\data\maps\YOURMAP.MAP` (8-letter name, `.MAP`).
+  anything you've deployed). Opened any other way, gecko still puts what you've deployed
+  (`base\mods\foc`) on top of the game it reads, so pieces made with the Tools menu show
+  once Tools > Apply New Art has run. Make a new map, lay ground, stamp buildings, place
+  scenery. Save it to `workflow\mod\data\maps\YOURMAP.MAP` (8-letter name, `.MAP`).
 * **From a recipe:** `compose_map.py` builds a map from a JSON recipe that lifts whole
   levels or buildings from other maps and places stamps by coordinates. `sitekit.py`
   writes such recipes from code. Run either one with `--preview` first.

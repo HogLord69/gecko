@@ -566,6 +566,10 @@ void Settings::setPythonExecutable(const QString& python) {
     _pythonExecutable = python.trimmed();
 }
 
+bool Settings::isBrowsingAnotherGame() const {
+    return QFileInfo::exists(getSettingsFilePath() + QStringLiteral(".foc-live"));
+}
+
 QColor Settings::getSelectionColor(const QString& key, const QColor& fallback) const {
     return _selectionColors.value(key, fallback);
 }
