@@ -93,11 +93,14 @@ def say(msg: str = "") -> None:
 
 def foc_data_paths(base: Path) -> list[str]:
     """What gecko mounts to edit YOUR mod: the working copy's archives in the game's load
-    order (rpu.dat and the add-ons: without rpu.dat gecko sees master.dat's 3102-entry
-    tiles.lst while the game uses RPU's 4077, and a map with a tile id >= 3102 crashes it on
-    load), then the base's loose data, then your deployed mod. Only paths that exist: a
-    path that does not exist can stop gecko mounting the ones after it."""
+    order (master.dat, critter.dat, the patch archives the game loads over them, such as the
+    patch000.dat of Steam's Fallout 2, then rpu.dat and the add-ons: without rpu.dat gecko
+    sees master.dat's 3102-entry tiles.lst while the game uses RPU's 4077, and a map with a
+    tile id >= 3102 crashes it on load), then the base's loose data, then your deployed mod.
+    Only paths that exist: a path that does not exist can stop gecko mounting the ones after it."""
     paths = [base / "master.dat", base / "critter.dat"]
+    paths += sorted((p for p in base.glob("patch*.dat") if re.fullmatch(r"patch\d{3}\.dat", p.name, re.I)),
+                    key=lambda p: p.name.lower())
     order = base / "mods" / "mods_order.txt"
     if order.is_file():
         for raw in order.read_text(encoding="cp1252", errors="replace").splitlines():

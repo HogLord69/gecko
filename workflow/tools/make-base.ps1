@@ -66,6 +66,17 @@ foreach ($f in $rootFiles) {
         Write-Warning "missing in source: $f"
     }
 }
+# The patch archives the game loads over master.dat and critter.dat (patch000.dat, ...: Steam's
+# Fallout 2 ships one, GOG's none) and the Hi-Res Patch's f2_res.dat when it sits beside them
+# (sfall: patchXXX.dat > sfall.dat > f2_res.dat > critter.dat > master.dat).
+$archives = @(Get-ChildItem -LiteralPath $Src -File -Filter 'patch*.dat' -EA SilentlyContinue |
+              Where-Object { $_.Name -match '^patch\d{3}\.dat$' })
+$res = Join-Path $Src 'f2_res.dat'
+if (Test-Path -LiteralPath $res) { $archives += Get-Item -LiteralPath $res }
+foreach ($a in $archives) {
+    Copy-Item -LiteralPath $a.FullName -Destination (Join-Path $Dst $a.Name) -Force
+    Write-Host "  $($a.Name)"
+}
 Write-Host "root files copied"
 
 # --- mods\ (flat) ------------------------------------------------------------
