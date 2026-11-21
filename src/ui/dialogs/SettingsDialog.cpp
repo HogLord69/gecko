@@ -119,7 +119,9 @@ void SettingsDialog::setupModToolsTab() {
         "with Python. Left empty, gecko uses the map workflow folder beside gecko.exe, or else the nearest "
         "folder above gecko.exe that has them.\n\n"
         "This is not a data path: the mod folder is your project, not game data. Data paths stay on the "
-        "General tab (with the map workflow: base\\mods\\foc inside it, the deployed mod).");
+        "General tab. What Apply New Art deploys (base\\mods\\foc in the mod folder) needs no data path: "
+        "gecko puts it on top of the game by itself. To read the game the way your mod's working copy "
+        "has it (with the Restoration Project), run python foc.py edit in the mod folder.");
     intro->setWordWrap(true);
     layout->addWidget(intro);
 
