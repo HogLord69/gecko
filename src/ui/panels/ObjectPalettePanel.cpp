@@ -97,8 +97,8 @@ void ObjectPalettePanel::setupGamePicker() {
     auto* combo = new GamePickerCombo(this);
     combo->setObjectName("gamePicker");
     combo->addItem("This game", QString());
-    combo->setToolTip("Show another game's pieces. Dropping one on the map brings it into your mod first, "
-                      "with new numbers, so it works in your game.");
+    combo->setToolTip("Show another game's pieces, or only your mod's own (Custom). Dropping another game's "
+                      "piece on the map brings it into your mod first, with new numbers, so it works in your game.");
     combo->beforePopup = [this]() {
         if (!_gamesListed) {
             listOtherGames();
@@ -135,6 +135,25 @@ void ObjectPalettePanel::setOtherGameProviders(GameListProvider list, GameLayers
     _gamesListed = false;
 }
 
+void ObjectPalettePanel::setOwnPiecesProvider(OwnPiecesProvider provider) {
+    _ownPiecesProvider = std::move(provider);
+    if (_gameCombo == nullptr) {
+        return;
+    }
+    const QSignalBlocker block(_gameCombo);
+    const int row = _gameCombo->findData(ownPiecesId());
+    if (_ownPiecesProvider && row < 0) {
+        _gameCombo->insertItem(1, "Custom: your mod's own pieces", ownPiecesId());
+    } else if (!_ownPiecesProvider && row >= 0) {
+        if (_showingOwn) {
+            _gameCombo->setCurrentIndex(0);
+            _showingOwn = false;
+            _objectsByCategory.clear();
+        }
+        _gameCombo->removeItem(row);
+    }
+}
+
 void ObjectPalettePanel::listOtherGames() {
     QString note;
     QList<OtherGame> games;
@@ -147,7 +166,8 @@ void ObjectPalettePanel::listOtherGames() {
     }
 
     const QSignalBlocker block(_gameCombo);
-    while (_gameCombo->count() > 1) {
+    const int keep = _gameCombo->findData(ownPiecesId()) >= 0 ? 2 : 1; // this game, and Custom
+    while (_gameCombo->count() > keep) {
         _gameCombo->removeItem(_gameCombo->count() - 1);
     }
     for (const auto& game : games) {
@@ -162,17 +182,52 @@ void ObjectPalettePanel::listOtherGames() {
     _gamesListed = !games.isEmpty();
 }
 
+void ObjectPalettePanel::restoreGameRow() {
+    const int previous = _gameCombo->findData(_showingOwn ? ownPiecesId() : _activeGame);
+    const QSignalBlocker block(_gameCombo);
+    _gameCombo->setCurrentIndex(previous < 0 ? 0 : previous);
+}
+
 void ObjectPalettePanel::onGameChanged(int index) {
     const QString id = _gameCombo->itemData(index).toString();
     const QString label = _gameCombo->itemText(index);
-    if (!id.isEmpty() && !_otherGames.contains(id) && !loadOtherGame(id, label)) {
-        // Stay on the game that was showing.
-        const int previous = _gameCombo->findData(_activeGame);
-        const QSignalBlocker block(_gameCombo);
-        _gameCombo->setCurrentIndex(previous < 0 ? 0 : previous);
+
+    if (id == ownPiecesId()) {
+        // The map's own game, only the pieces the mod's tools gave out: read again each time, so a
+        // piece Apply New Art has just put in shows.
+        QString error;
+        std::optional<std::map<QString, std::set<int>>> lines;
+        if (_ownPiecesProvider) {
+            QApplication::setOverrideCursor(Qt::WaitCursor);
+            lines = _ownPiecesProvider(&error);
+            QApplication::restoreOverrideCursor();
+        }
+        if (!lines) {
+            QtDialogs::showWarning(this, "Custom",
+                error.isEmpty() ? QString("Your mod's tools didn't say which pieces are its own.") : error);
+            restoreGameRow();
+            return;
+        }
+        _ownLines = std::move(*lines);
+        _showingOwn = true;
+        _activeGame.clear();
+        _gameNote->setText("Your mod's own pieces. One made with the Tools menu or brought in from another game "
+                           "shows here once Tools > Apply New Art has put it in the game.");
+        _gameNote->setVisible(true);
+        _onlyNewCheck->setVisible(false);
+        clearObjectSelection();
+        _objectsByCategory.clear();
+        loadCategoryObjects(_currentCategory);
+        rebuildItems();
         return;
     }
 
+    if (!id.isEmpty() && !_otherGames.contains(id) && !loadOtherGame(id, label)) {
+        restoreGameRow(); // stay on what was showing
+        return;
+    }
+
+    _showingOwn = false;
     _activeGame = id;
     _gameNote->setText(QString("Pieces from %1. Drop one on the map to bring it into your mod: it gets new "
                                "numbers, and Tools > Apply New Art puts it in the game.")
@@ -251,12 +306,13 @@ resource::GameResources& ObjectPalettePanel::activeResources() const {
 
 void ObjectPalettePanel::releaseOtherGames() {
     clearObjectSelection();
-    if (!_activeGame.isEmpty()) {
+    if (!_activeGame.isEmpty() || _showingOwn) {
         _objectsByCategory.clear();
         if (_model) {
             _model->setItems({});
         }
         _activeGame.clear();
+        _showingOwn = false;
         if (_gameCombo) {
             const QSignalBlocker block(_gameCombo);
             _gameCombo->setCurrentIndex(0);
@@ -378,9 +434,14 @@ void ObjectPalettePanel::loadCategoryObjects(ObjectCategory category) {
         const auto& proFiles = lst->list();
         int loadedCount = 0;
 
-        // Another game, with "Only pieces Fallout 2 doesn't have": just the lines the mod tools named.
+        // Another game, with "Only pieces Fallout 2 doesn't have", or Custom (the mod's own pieces): just the
+        // lines the mod tools named. A folder Custom has no lines for shows nothing.
+        static const std::set<int> noLines;
         const std::set<int>* onlyLines = nullptr;
-        if (!_activeGame.isEmpty() && _onlyNewCheck && _onlyNewCheck->isChecked()) {
+        if (_showingOwn) {
+            const auto lines = _ownLines.find(getCategoryDisplayName(category).toLower());
+            onlyLines = lines != _ownLines.end() ? &lines->second : &noLines;
+        } else if (!_activeGame.isEmpty() && _onlyNewCheck && _onlyNewCheck->isChecked()) {
             if (const auto game = _newPieces.find(_activeGame); game != _newPieces.end()) {
                 if (const auto lines = game->second.find(getCategoryDisplayName(category).toLower());
                     lines != game->second.end()) {
@@ -650,8 +711,8 @@ void ObjectPalettePanel::clearObjectSelection() {
 }
 
 std::optional<std::pair<int, ObjectCategory>> ObjectPalettePanel::revealProto(uint32_t pid) {
-    // A map object's PID is the map's own game's: show that game before looking it up.
-    if (showingOtherGame() && _gameCombo) {
+    // A map object's PID is the map's own game's: show all of that game before looking it up.
+    if ((showingOtherGame() || _showingOwn) && _gameCombo) {
         _gameCombo->setCurrentIndex(0);
     }
 

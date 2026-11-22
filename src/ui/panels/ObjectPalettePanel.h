@@ -109,6 +109,15 @@ public:
     /// A game's data, or nothing with `error` saying why.
     using GameLayersProvider = std::function<std::optional<OtherGameData>(const QString& id, QString* error)>;
     void setOtherGameProviders(GameListProvider list, GameLayersProvider layers);
+    /// The mod's own pieces, per proto folder ("items", "scenery", ...): the 1-based .lst lines the mod's
+    /// tools gave out (gecko_assets.py own-pieces). Nothing, with `error` saying why, when they can't say.
+    using OwnPiecesProvider = std::function<std::optional<std::map<QString, std::set<int>>>(QString* error)>;
+    /// Puts "Custom: your mod's own pieces" in the Game list, after this game: the map's own game, with
+    /// only those pieces in each tab. Asked again each time it is picked, so new pieces show.
+    void setOwnPiecesProvider(OwnPiecesProvider provider);
+    [[nodiscard]] bool showingOwnPieces() const { return _showingOwn; }
+    /// The Game list entry's data for the mod's own pieces (no game id from the tools starts with '#').
+    static QString ownPiecesId() { return QStringLiteral("#own"); }
     /// Drop every other game's data and textures; the palette goes back to the map's own game.
     void releaseOtherGames();
     [[nodiscard]] bool showingOtherGame() const { return !_activeGame.isEmpty(); }
@@ -152,6 +161,8 @@ private:
     void setupGamePicker();
     void listOtherGames();
     void onGameChanged(int index);
+    /// Back to the entry that was showing (after one that couldn't be read).
+    void restoreGameRow();
     /// Mount `id`'s layers in a resource set of its own; false (after saying why) when it can't be read.
     bool loadOtherGame(const QString& id, const QString& label);
     [[nodiscard]] resource::GameResources& activeResources() const;
@@ -186,6 +197,9 @@ private:
     std::map<QString, std::map<QString, std::set<int>>> _newPieces; ///< per other game, see OtherGameData
     GameListProvider _gameListProvider;
     GameLayersProvider _gameLayersProvider;
+    OwnPiecesProvider _ownPiecesProvider;
+    bool _showingOwn = false;                      ///< the Custom entry: the map's game, the mod's pieces only
+    std::map<QString, std::set<int>> _ownLines;    ///< per proto folder, as the provider gave them
     bool _gamesListed = false;
     QString _activeGame; // empty: the map's own game
     std::map<QString, std::unique_ptr<resource::GameResources>> _otherGames;

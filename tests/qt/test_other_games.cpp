@@ -660,3 +660,69 @@ TEST_CASE("The working copy's data paths follow the game's load order, as foc.py
     const std::vector<std::filesystem::path> named{ (other / "master.dat").lexically_normal(), other.lexically_normal() };
     CHECK(geck::ModToolsRunner::workingCopyDataPaths(kit) == named);
 }
+
+TEST_CASE("The Game list's Custom entry shows only the mod's own pieces of the map's game", "[qt][othergames]") {
+    QTemporaryDir tmp;
+    REQUIRE(tmp.isValid());
+    const std::filesystem::path base(tmp.path().toStdU16String());
+    // the map's own game: a base piece on line 1 and the mod's own on line 2
+    const auto game = makeGame(base / "game");
+    std::filesystem::copy_file(geck::test::dataPath("test_item_drug_radx.pro"), game / "proto" / "items" / "00000002.pro");
+    write(game / "proto" / "items" / "items.lst", "00000001.pro\r\n00000002.pro\r\n");
+    const auto other = makeGame(base / "other");
+
+    geck::resource::GameResources own;
+    own.files().addDataPath(game);
+    geck::ObjectPalettePanel palette(own);
+    palette.setOtherGameProviders(
+        [](QString*) { return QList<geck::ObjectPalettePanel::OtherGame>{ { "other", "Other Game" } }; },
+        [&other](const QString&, QString*) -> std::optional<geck::ObjectPalettePanel::OtherGameData> {
+            geck::ObjectPalettePanel::OtherGameData data;
+            data.layers = { other };
+            return data;
+        });
+    int asked = 0;
+    palette.setOwnPiecesProvider([&asked](QString*) -> std::optional<std::map<QString, std::set<int>>> {
+        ++asked;
+        return std::map<QString, std::set<int>>{ { "items", { 2, 9 } }, { "scenery", {} } }; // 9: not put in yet
+    });
+    palette.loadObjects();
+    REQUIRE(palette.getObjectInfo(1, geck::ObjectCategory::ITEMS) != nullptr); // this game: both
+
+    auto* picker = palette.findChild<QComboBox*>("gamePicker");
+    REQUIRE(picker != nullptr);
+    REQUIRE(picker->count() == 2);
+    CHECK(picker->itemData(1).toString() == geck::ObjectPalettePanel::ownPiecesId());
+    picker->showPopup(); // the other games go after it
+    picker->hidePopup();
+    REQUIRE(picker->count() == 3);
+    CHECK(picker->itemData(1).toString() == geck::ObjectPalettePanel::ownPiecesId());
+    CHECK(picker->itemData(2).toString() == "other");
+
+    picker->setCurrentIndex(1);
+    CHECK(palette.showingOwnPieces());
+    CHECK_FALSE(palette.showingOtherGame()); // placed as they are, not brought in
+    const geck::ObjectInfo* info = palette.getObjectInfo(0, geck::ObjectCategory::ITEMS);
+    REQUIRE(info != nullptr);
+    CHECK(info->proFileName == "00000002.pro");
+    CHECK(info->resources == &own);
+    CHECK(info->sourceGame.isEmpty());
+    CHECK(palette.getObjectInfo(1, geck::ObjectCategory::ITEMS) == nullptr);
+
+    // another game from Custom, then back: asked again, so a piece just put in would show
+    picker->setCurrentIndex(2);
+    CHECK_FALSE(palette.showingOwnPieces());
+    CHECK(palette.showingOtherGame());
+    picker->setCurrentIndex(1);
+    CHECK(palette.showingOwnPieces());
+    CHECK(asked == 2);
+
+    // the eyedropper looks a map object up in all of the map's game
+    const auto revealed = palette.revealProto(0x00000001);
+    REQUIRE(revealed.has_value());
+    CHECK(picker->currentIndex() == 0);
+    CHECK_FALSE(palette.showingOwnPieces());
+
+    palette.setOwnPiecesProvider({}); // no tools: no entry
+    CHECK(picker->findData(geck::ObjectPalettePanel::ownPiecesId()) < 0);
+}

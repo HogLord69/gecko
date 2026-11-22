@@ -427,7 +427,7 @@ def missing_packages() -> list[str]:
 # The working copy of Fallout 2 the tools read the game from and deploy into (the deployed layer's
 # game folder). The map workflow kit makes it with setup.py --build-base; without it most commands
 # can't run, and the answer says so (needs_base) so gecko can offer to make it.
-NO_BASE_NEEDED = {"info", "sources", "stamp-games", "pending"}
+NO_BASE_NEEDED = {"info", "sources", "stamp-games", "pending", "own-pieces"}
 
 
 def working_copy() -> Path:
@@ -590,6 +590,25 @@ def cmd_text(args) -> dict:
 
 def cmd_pending(_args) -> dict:
     return {"items": read_pending()}
+
+
+def cmd_own_pieces(_args) -> dict:
+    """The mod's own pieces, for the Custom entry of gecko's Game list: per proto folder, the 1-based
+    .lst lines its registry gives out (mod/ids/proto_*.txt, from the mod's start in each list, as
+    lists.proto_lst places them). A retired (blank) line is left out, and so are the base game's
+    pieces the mod only changed. A line past the end of the list gecko reads is a piece not in the
+    game yet: Apply New Art puts it there."""
+    from foclib import TYPE_NAME
+    from gen_ids import read_registry
+    from ids import FOC_START, PROTO_KEY
+    pieces: dict[str, list[int]] = {}
+    for t, key in PROTO_KEY.items():
+        name = TYPE_NAME[t]
+        if name == "tiles":
+            continue
+        start = FOC_START[key]
+        pieces[name] = [start + n for n, entry in enumerate(read_registry(IDS / f"{key}.txt")) if entry]
+    return {"pieces": pieces}
 
 
 # ------------------------------------------------------------------------------ other games
@@ -1411,6 +1430,7 @@ def main() -> int:
     p.add_argument("--title")
     p.add_argument("--text")
     sub.add_parser("pending")
+    sub.add_parser("own-pieces")
     sub.add_parser("sources")
     p = sub.add_parser("source")
     p.add_argument("name")
@@ -1462,7 +1482,7 @@ def main() -> int:
 
     handlers = {"info": cmd_info, "suggest-name": cmd_suggest_name, "preview": cmd_preview,
                 "create": cmd_create, "mirror": cmd_mirror, "resize": cmd_resize,
-                "text": cmd_text, "pending": cmd_pending,
+                "text": cmd_text, "pending": cmd_pending, "own-pieces": cmd_own_pieces,
                 "sources": cmd_sources, "source": cmd_source, "port": cmd_port,
                 "stamp-games": cmd_stamp_games, "stamp-convert": cmd_stamp_convert,
                 "building-preview": cmd_building_preview, "building-create": cmd_building_create}

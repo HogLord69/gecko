@@ -3258,6 +3258,32 @@ void MainWindow::connectOtherGames() {
             }
             return data;
         });
+    _objectPalettePanel->setOwnPiecesProvider([this](QString* error) -> std::optional<std::map<QString, std::set<int>>> {
+        if (!modToolsConfigured()) {
+            *error = "Which pieces are your mod's own comes from its tools: set the mod folder in File > Preferences "
+                     "> Mod Tools.";
+            return std::nullopt;
+        }
+        if (_settings->isBrowsingAnotherGame()) {
+            *error = "gecko is open on another game, whose lists don't hold your mod's pieces.";
+            return std::nullopt;
+        }
+        ModToolsRunner runner(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()), _settings->getPythonExecutable());
+        const ModToolResult result = runner.runAndWait({ "own-pieces" });
+        if (!result.ok) {
+            *error = "Your mod's tools didn't list its own pieces: " + result.error;
+            return std::nullopt;
+        }
+        std::map<QString, std::set<int>> pieces;
+        const QJsonObject folders = result.json.value("pieces").toObject();
+        for (auto it = folders.constBegin(); it != folders.constEnd(); ++it) {
+            auto& lines = pieces[it.key()];
+            for (const auto& line : it.value().toArray()) {
+                lines.insert(line.toInt());
+            }
+        }
+        return pieces;
+    });
 }
 
 std::optional<uint32_t> MainWindow::bringInFromOtherGame(const QString& source, uint32_t sourcePid) {
