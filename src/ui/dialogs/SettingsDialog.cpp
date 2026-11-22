@@ -117,11 +117,12 @@ void SettingsDialog::setupModToolsTab() {
         "The Tools menu (Add Scenery from Picture, Apply New Art, and the copy and name entries on the "
         "map's right-click menu) runs your mod's own tools: tools/gecko_assets.py in the mod folder, "
         "with Python. Left empty, gecko uses the map workflow folder beside gecko.exe, or else the nearest "
-        "folder above gecko.exe that has them.\n\n"
+        "folder above gecko.exe that has them, and the Python that comes with gecko (the python folder "
+        "beside gecko.exe), or else python from PATH.\n\n"
         "This is not a data path: the mod folder is your project, not game data. Data paths stay on the "
         "General tab. What Apply New Art deploys (base\\mods\\foc in the mod folder) needs no data path: "
-        "gecko puts it on top of the game by itself. To read the game the way your mod's working copy "
-        "has it (with the Restoration Project), run python foc.py edit in the mod folder.");
+        "gecko puts it on top of the game by itself. Once the tools have made their working copy of "
+        "Fallout 2, gecko offers to read the game from it, with the Restoration Project.");
     intro->setWordWrap(true);
     layout->addWidget(intro);
 
@@ -147,7 +148,9 @@ void SettingsDialog::setupModToolsTab() {
 
     auto* pythonRow = new QHBoxLayout();
     _pythonEdit = new QLineEdit();
-    _pythonEdit->setPlaceholderText("python (from PATH)");
+    const QString bundledPython = ModToolsRunner::bundledPython();
+    _pythonEdit->setPlaceholderText(bundledPython.isEmpty() ? QString("python (from PATH)")
+                                                            : "the Python that comes with gecko: " + bundledPython);
     pythonRow->addWidget(_pythonEdit, 1);
     auto* pythonBrowse = new QPushButton("Browse...");
     connect(pythonBrowse, &QPushButton::clicked, this, [this]() {

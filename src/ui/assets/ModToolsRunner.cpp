@@ -113,7 +113,38 @@ namespace {
 ModToolsRunner::ModToolsRunner(std::filesystem::path root, QString python, QObject* parent)
     : QObject(parent)
     , _root(std::move(root))
-    , _python(python.trimmed().isEmpty() ? QStringLiteral("python") : python.trimmed()) {
+    , _python(effectivePython(python)) {
+}
+
+QString ModToolsRunner::bundledPython(const QString& applicationDir) {
+    if (applicationDir.isEmpty()) {
+        return {};
+    }
+    const QString python = QDir(applicationDir).filePath(QStringLiteral("python/python.exe"));
+    return QFileInfo(python).isFile() ? QDir::toNativeSeparators(python) : QString();
+}
+
+QString ModToolsRunner::effectivePython(const QString& configured, const QString& applicationDir) {
+    const QString python = configured.trimmed();
+    const bool fromPath = python.isEmpty() || python.compare(QLatin1String("python"), Qt::CaseInsensitive) == 0
+        || python.compare(QLatin1String("python.exe"), Qt::CaseInsensitive) == 0;
+    if (!fromPath) {
+        return python;
+    }
+    const QString bundled = bundledPython(applicationDir);
+    if (!bundled.isEmpty()) {
+        return bundled;
+    }
+    return python.isEmpty() ? QStringLiteral("python") : python;
+}
+
+QProcessEnvironment ModToolsRunner::pythonEnvironment() const {
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("PYTHONIOENCODING"), QStringLiteral("utf-8"));
+    if (_python == bundledPython()) {
+        environment.insert(QStringLiteral("PYTHONNOUSERSITE"), QStringLiteral("1"));
+    }
+    return environment;
 }
 
 std::filesystem::path ModToolsRunner::scriptFor(const std::filesystem::path& root) {
@@ -153,7 +184,7 @@ std::filesystem::path ModToolsRunner::resolveRoot(const std::filesystem::path& c
     return detectRootAboveApplication();
 }
 
-std::filesystem::path ModToolsRunner::deployedModFolder(const std::filesystem::path& root) {
+std::filesystem::path ModToolsRunner::workingCopyFolder(const std::filesystem::path& root) {
     if (root.empty()) {
         return {};
     }
@@ -167,9 +198,66 @@ std::filesystem::path ModToolsRunner::deployedModFolder(const std::filesystem::p
             base = path.is_absolute() ? path : root / path;
         }
     }
+    return base.lexically_normal();
+}
+
+std::filesystem::path ModToolsRunner::deployedModFolder(const std::filesystem::path& root) {
+    const std::filesystem::path base = workingCopyFolder(root);
+    if (base.empty()) {
+        return {};
+    }
     const std::filesystem::path deployed = (base / "mods" / "foc").lexically_normal();
     std::error_code ec;
     return std::filesystem::is_directory(deployed, ec) ? deployed : std::filesystem::path{};
+}
+
+std::vector<std::filesystem::path> ModToolsRunner::workingCopyDataPaths(const std::filesystem::path& root) {
+    namespace fs = std::filesystem;
+    const fs::path base = workingCopyFolder(root);
+    std::error_code ec;
+    if (base.empty() || !fs::is_regular_file(base / "master.dat", ec)) {
+        return {};
+    }
+    std::vector<fs::path> paths{ base / "master.dat", base / "critter.dat" };
+
+    static const QRegularExpression patchArchive(
+        QStringLiteral(R"(^patch\d{3}\.dat$)"), QRegularExpression::CaseInsensitiveOption);
+    std::vector<fs::path> patches;
+    for (fs::directory_iterator it(base, ec), end; !ec && it != end; it.increment(ec)) {
+        std::error_code fileError;
+        if (it->is_regular_file(fileError) && patchArchive.match(toQString(it->path().filename())).hasMatch()) {
+            patches.push_back(it->path());
+        }
+    }
+    std::sort(patches.begin(), patches.end(), [](const fs::path& a, const fs::path& b) {
+        return toQString(a.filename()).toLower() < toQString(b.filename()).toLower();
+    });
+    paths.insert(paths.end(), patches.begin(), patches.end());
+
+    QFile order(toQString(base / "mods" / "mods_order.txt"));
+    if (order.open(QIODevice::ReadOnly)) {
+        // The game's own text file (cp1252); mod file names are ASCII in practice.
+        for (const QString& line : QString::fromLatin1(order.readAll()).split(u'\n')) {
+            const QString name = line.trimmed();
+            if (name.isEmpty() || name.startsWith(u';') || name.startsWith(u'#')
+                || name.toLower() == QLatin1String("foc")) {
+                continue;
+            }
+            paths.push_back(base / "mods" / fs::path(name.toStdU16String()));
+        }
+    }
+    paths.push_back(base);
+    paths.push_back(base / "mods" / "foc");
+
+    // Only what exists: a data path that doesn't can stop gecko mounting the ones after it.
+    std::vector<fs::path> existing;
+    for (const fs::path& path : paths) {
+        std::error_code missing;
+        if (fs::exists(path, missing)) {
+            existing.push_back(path.lexically_normal());
+        }
+    }
+    return existing;
 }
 
 std::vector<std::filesystem::path> ModToolsRunner::withDeployedMod(std::vector<std::filesystem::path> dataPaths,
@@ -218,6 +306,29 @@ void ModToolsRunner::setGameFolderHint(std::function<QString()> hint) {
     gameFolderHint() = std::move(hint);
 }
 
+namespace {
+    std::function<void(const std::filesystem::path&)>& workingCopyMadeHook() {
+        static std::function<void(const std::filesystem::path&)> hook;
+        return hook;
+    }
+
+    /// The hook, once the event loop is back: after the command's own answer has been handled.
+    void announceWorkingCopy(const std::filesystem::path& root) {
+        if (!workingCopyMadeHook()) {
+            return;
+        }
+        QTimer::singleShot(0, QCoreApplication::instance(), [root]() {
+            if (workingCopyMadeHook()) {
+                workingCopyMadeHook()(root);
+            }
+        });
+    }
+} // namespace
+
+void ModToolsRunner::setWorkingCopyMadeHook(std::function<void(const std::filesystem::path&)> hook) {
+    workingCopyMadeHook() = std::move(hook);
+}
+
 bool ModToolsRunner::tryToFix(const ModToolResult& result) {
     if (result.ok) {
         return false;
@@ -242,8 +353,14 @@ QProcess* ModToolsRunner::run(const QStringList& args, std::function<void(const 
                 (*attempt)(fixesLeft - 1);
                 return;
             }
+            // read before done(), which may delete the runner
+            const bool madeWorkingCopy = self && std::exchange(self->_madeWorkingCopy, false);
+            const std::filesystem::path root = self ? self->_root : std::filesystem::path{};
             done(result);
             *attempt = nullptr; // the chain holds itself until it is answered
+            if (madeWorkingCopy) {
+                announceWorkingCopy(root);
+            }
         });
     };
     return (*attempt)(2);
@@ -254,8 +371,7 @@ QProcess* ModToolsRunner::runOnce(const QStringList& args, std::function<void(co
     process->setProgram(_python);
     process->setArguments(scriptArguments(args));
     process->setWorkingDirectory(toQString(_root));
-    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-    environment.insert(QStringLiteral("PYTHONIOENCODING"), QStringLiteral("utf-8"));
+    QProcessEnvironment environment = pythonEnvironment();
     environment.insert(QStringLiteral("PYTHONUTF8"), QStringLiteral("1"));
     process->setProcessEnvironment(environment);
 
@@ -292,6 +408,9 @@ ModToolResult ModToolsRunner::runAndWait(const QStringList& args, int timeoutMs)
     ModToolResult result = runOnceAndWait(args, timeoutMs);
     for (int fixesLeft = 2; fixesLeft > 0 && tryToFix(result); --fixesLeft) {
         result = runOnceAndWait(args, timeoutMs);
+    }
+    if (std::exchange(_madeWorkingCopy, false)) {
+        announceWorkingCopy(_root);
     }
     return result;
 }
@@ -363,8 +482,7 @@ bool ModToolsRunner::offerToMakeWorkingCopy(const QJsonObject& answer) {
     process.setArguments({ setup, "--yes", "--build-base", "--fallout2", QDir::toNativeSeparators(folder) });
     process.setWorkingDirectory(toQString(_root));
     process.setProcessChannelMode(QProcess::MergedChannels);
-    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-    environment.insert(QStringLiteral("PYTHONIOENCODING"), QStringLiteral("utf-8"));
+    QProcessEnvironment environment = pythonEnvironment();
     environment.insert(QStringLiteral("PYTHONUNBUFFERED"), QStringLiteral("1"));
     process.setProcessEnvironment(environment);
     QByteArray output;
@@ -395,6 +513,7 @@ bool ModToolsRunner::offerToMakeWorkingCopy(const QJsonObject& answer) {
 
     const bool made = QFileInfo::exists(QDir(base).filePath("master.dat"));
     spdlog::info("Mod tools: working copy from {} -> {}", folder.toStdString(), made ? "made" : "failed");
+    _madeWorkingCopy = _madeWorkingCopy || made;
     if (!made) {
         QString detail = lastLines(output, 10);
         if (detail.isEmpty()) {
@@ -402,8 +521,9 @@ bool ModToolsRunner::offerToMakeWorkingCopy(const QJsonObject& answer) {
         }
         QtDialogs::showWarning(parent, "Working Copy of Fallout 2",
             QString("The working copy wasn't made:\n\n%1\n\nTo make it by hand, open a Command Prompt in %2 and run:\n"
-                    "python setup.py --build-base")
-                .arg(detail, QDir::toNativeSeparators(toQString(_root))));
+                    "%3 setup.py --build-base")
+                .arg(detail, QDir::toNativeSeparators(toQString(_root)),
+                    _python.contains(u' ') ? u'"' + _python + u'"' : _python));
     }
     return made;
 }
@@ -468,9 +588,7 @@ bool ModToolsRunner::offerToInstall(const QStringList& packages, const QString& 
     pip.setProgram(_python);
     pip.setArguments(QStringList{ "-m", "pip", "install", "--disable-pip-version-check" } + packages);
     pip.setProcessChannelMode(QProcess::MergedChannels);
-    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-    environment.insert(QStringLiteral("PYTHONIOENCODING"), QStringLiteral("utf-8"));
-    pip.setProcessEnvironment(environment);
+    pip.setProcessEnvironment(pythonEnvironment());
     QEventLoop loop;
     connect(&pip, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), &loop, &QEventLoop::quit);
     connect(&pip, &QProcess::errorOccurred, &loop, [&loop](QProcess::ProcessError error) {
@@ -586,11 +704,24 @@ bool ModToolsRunner::startApply(qint64 geckoPid, const QString& geckoExe, const 
     }
     std::wstring command = commandLine.toStdWString();
     const std::wstring directory = _root.wstring();
+    // gecko's own environment, plus no user site-packages for the Python that comes with gecko
+    std::wstring environment;
+    if (_python == bundledPython()) {
+        QProcessEnvironment variables = QProcessEnvironment::systemEnvironment();
+        variables.insert(QStringLiteral("PYTHONNOUSERSITE"), QStringLiteral("1"));
+        for (const QString& variable : variables.toStringList()) {
+            environment += variable.toStdWString();
+            environment.push_back(L'\0');
+        }
+        environment.push_back(L'\0');
+    }
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION info{};
-    if (!CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE,
-            CREATE_NEW_CONSOLE | CREATE_NEW_PROCESS_GROUP, nullptr, directory.c_str(), &startup, &info)) {
+    const DWORD flags
+        = CREATE_NEW_CONSOLE | CREATE_NEW_PROCESS_GROUP | (environment.empty() ? 0 : CREATE_UNICODE_ENVIRONMENT);
+    if (!CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, flags,
+            environment.empty() ? nullptr : environment.data(), directory.c_str(), &startup, &info)) {
         if (error) {
             *error = QString("Couldn't start \"%1\" (Windows error %2). Check the Python setting in "
                              "File > Preferences > Mod Tools.")

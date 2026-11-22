@@ -21,8 +21,8 @@ python foc.py
 | **Windows 10 or 11** | gecko and the game are Windows programs |
 | **Fallout 2** (GOG or Steam) | your own copy. Nothing from the game is in this repo |
 | **[Restoration Project Unofficial](https://github.com/BGforge/fallout2-rpu)** installed into it | the tools expect its tile list and map fixes (`mods\rpu.dat`) |
-| **[Python 3.10+](https://www.python.org/downloads/)** | tick "Add python.exe to PATH" when installing |
-| **gecko** | the zip from [Releases](https://github.com/HogLord69/gecko/releases/latest). Unzip it anywhere |
+| **gecko** | the zip from [Releases](https://github.com/HogLord69/gecko/releases/latest). Unzip it into a new folder |
+| **Python 3.10+** | comes in the zip, with the packages the tools need (gecko's `python` folder). Building gecko yourself: [python.org](https://www.python.org/downloads/), tick "Add python.exe to PATH" |
 
 **Optional:** any other Fallout-engine games you own, to borrow buildings from. Setup finds
 Fallout 1, Fallout: Sonora, Fallout: Nevada, Nevada Mod (Extended), Olympus 2207, Fallout 1.5:
@@ -35,26 +35,29 @@ Game list (object palette) and in **File > Browse Maps**, and gets a launcher in
 ## Set up (once)
 
 1. Get it. The easiest way is the zip from
-   [Releases](https://github.com/HogLord69/gecko/releases/latest): gecko, the stamps and
-   this `workflow` folder in one download. Unzip it anywhere. (Or clone this repo, if you
-   build gecko yourself.)
-2. Open a terminal in the `workflow` folder.
-3. Run:
-
-   ```bat
-   python setup.py
-   ```
-
-   It installs four Python packages (pillow, numpy, scipy, opencv-python-headless), finds your games (press
-   Enter to accept what it finds, or type a folder), asks where `gecko.exe` is, and offers
-   to make the **working copy**: a copy of Fallout 2 + RPU in `workflow\base` (about
-   1.2 GB). Your real install is only read, and the copy step re-counts it afterwards and
-   stops if anything changed.
-4. Run `python foc.py doctor`. Every line should say `[ok]`. Anything that doesn't
-   says how to fix it.
+   [Releases](https://github.com/HogLord69/gecko/releases/latest): gecko, its own Python, the
+   stamps and this `workflow` folder in one download. Unzip it into a new folder. (Or clone
+   this repo, if you build gecko yourself.)
+2. Run `gecko.exe` and give it your Fallout 2 folder when Preferences asks. The first time
+   a tool needs it, gecko offers to make the **working copy**: a copy of Fallout 2 + RPU in
+   `workflow\base` (about 1.2 GB). Your real install is only read, and the copy step
+   re-counts it afterwards and stops if anything changed. Once it's made, gecko offers to
+   read the game from it, with RPU.
+3. For other games to borrow from, double-click `Set up other games.bat` beside `gecko.exe`.
+   It finds your games (press Enter to accept what it finds, or type a folder) and asks
+   where `gecko.exe` is.
 
 Your answers go into `workflow\config.json`. It's a short text file: open it to change a
-path, or run `setup.py` again.
+path, or run setup again.
+
+The commands on the rest of this page start with `python`. With the zip, use gecko's own:
+open a Command Prompt in `workflow` and type `..\python\python.exe` where a command says
+`python` (`..\python\python.exe foc.py doctor`). Or install Python 3.10+ yourself from
+python.org (not the Microsoft Store: Windows hides the new files the Store's Python writes
+under AppData from gecko, and gecko's stamps live there) and run `python setup.py` once: it
+installs four packages (pillow, numpy, scipy, opencv-python-headless).
+`python foc.py doctor` checks the setup: every line should say `[ok]`, and anything that
+doesn't says how to fix it.
 
 ---
 
@@ -111,10 +114,11 @@ place's layout from OpenStreetMap to base it on. See
 
 Two ways, and most maps use both:
 
-* **In gecko:** `python foc.py edit` opens gecko on your mod (your working copy plus
-  anything you've deployed). Opened any other way, gecko still puts what you've deployed
-  (`base\mods\foc`) on top of the game it reads, so pieces made with the Tools menu show
-  once Tools > Apply New Art has run. Make a new map, lay ground, stamp buildings, place
+* **In gecko:** once you've let gecko read the game from the working copy (it offers when
+  the copy is made; `python foc.py edit` does the same), it shows your mod: the working copy
+  plus anything you've deployed. Whatever game folder it reads, gecko puts what you've
+  deployed (`base\mods\foc`) on top, so pieces made with the Tools menu show once Tools >
+  Apply New Art has run. Make a new map, lay ground, stamp buildings, place
   scenery. Save it to `workflow\mod\data\maps\YOURMAP.MAP` (8-letter name, `.MAP`).
 * **From a recipe:** `compose_map.py` builds a map from a JSON recipe that lifts whole
   levels or buildings from other maps and places stamps by coordinates. `sitekit.py`

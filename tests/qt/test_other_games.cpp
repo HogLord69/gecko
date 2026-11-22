@@ -593,3 +593,70 @@ TEST_CASE("Settings know when a launcher has gecko open on another game", "[qt][
     QFile::remove(marker);
     CHECK_FALSE(settings.isBrowsingAnotherGame());
 }
+
+TEST_CASE("The tools run with the Python that comes with gecko unless Preferences names another", "[qt][othergames]") {
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+    const std::filesystem::path dir(temp.path().toStdU16String());
+    const QString release = QString::fromStdU16String((dir / "gecko").u16string());
+    const QString build = QString::fromStdU16String((dir / "build").u16string());
+    std::filesystem::create_directories(dir / "build");
+    write(dir / "gecko" / "python" / "python.exe", "");
+    const QString bundled = QDir::toNativeSeparators(QDir(release).filePath("python/python.exe"));
+
+    CHECK(geck::ModToolsRunner::bundledPython(release) == bundled);
+    CHECK(geck::ModToolsRunner::bundledPython(build).isEmpty());
+    // an empty setting or a bare python: whatever PATH finds first is not wanted when gecko has its own
+    CHECK(geck::ModToolsRunner::effectivePython("", release) == bundled);
+    CHECK(geck::ModToolsRunner::effectivePython(" python ", release) == bundled);
+    CHECK(geck::ModToolsRunner::effectivePython("Python.exe", release) == bundled);
+    CHECK(geck::ModToolsRunner::effectivePython("C:\\Python313\\python.exe", release) == "C:\\Python313\\python.exe");
+    CHECK(geck::ModToolsRunner::effectivePython("py", release) == "py");
+    // a gecko with no Python of its own keeps PATH's
+    CHECK(geck::ModToolsRunner::effectivePython("", build) == "python");
+    CHECK(geck::ModToolsRunner::effectivePython("python.exe", build) == "python.exe");
+}
+
+TEST_CASE("The working copy's data paths follow the game's load order, as foc.py edit sets them", "[qt][othergames]") {
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+    const std::filesystem::path dir(temp.path().toStdU16String());
+    const std::filesystem::path kit = dir / "workflow";
+    const std::filesystem::path base = kit / "base";
+    write(kit / "tools" / "gecko_assets.py", "\n");
+    CHECK(geck::ModToolsRunner::workingCopyDataPaths(kit).empty()); // no working copy yet
+    CHECK(geck::ModToolsRunner::workingCopyDataPaths({}).empty());
+
+    write(base / "master.dat", "");
+    write(base / "critter.dat", "");
+    write(base / "PATCH001.DAT", "");
+    write(base / "patch000.dat", "");
+    write(base / "patch_old.dat", ""); // not one the engine loads (patch%03d.dat)
+    write(base / "mods" / "rpu.dat", "");
+    write(base / "mods" / "npc_armor.dat", "");
+    write(base / "mods" / "mods_order.txt", "rpu.dat\r\n; a comment\r\nnot_there.dat\r\nfoc\r\n\r\nnpc_armor.dat\r\n");
+    std::filesystem::create_directories(base / "mods" / "foc");
+
+    const std::vector<std::filesystem::path> expected{
+        base / "master.dat",
+        base / "critter.dat",
+        base / "patch000.dat",
+        base / "PATCH001.DAT",
+        base / "mods" / "rpu.dat",
+        base / "mods" / "npc_armor.dat",
+        base,
+        base / "mods" / "foc",
+    };
+    std::vector<std::filesystem::path> normal;
+    for (const auto& path : expected) {
+        normal.push_back(path.lexically_normal());
+    }
+    CHECK(geck::ModToolsRunner::workingCopyDataPaths(kit) == normal);
+
+    // the working copy config.json names, relative to the kit
+    const std::filesystem::path other = kit / "copies" / "fo2";
+    write(other / "master.dat", "");
+    write(kit / "config.json", R"({"base": "copies/fo2"})");
+    const std::vector<std::filesystem::path> named{ (other / "master.dat").lexically_normal(), other.lexically_normal() };
+    CHECK(geck::ModToolsRunner::workingCopyDataPaths(kit) == named);
+}

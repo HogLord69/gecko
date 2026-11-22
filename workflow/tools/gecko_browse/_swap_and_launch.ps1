@@ -98,7 +98,16 @@ if (Test-Path -LiteralPath $backupPath) {
 # nothing was saved; a failure here never blocks the restore above.
 if ($Source) {
     $tools = Split-Path $PSScriptRoot -Parent
-    $py = Get-Command python -ErrorAction SilentlyContinue
+    # The Python that comes with gecko (python\ beside gecko.exe in the release zip), else python from PATH
+    $py = $null
+    $bundled = Join-Path (Split-Path $geckoExe -Parent) 'python\python.exe'
+    if (Test-Path -LiteralPath $bundled) {
+        $py = $bundled
+        $env:PYTHONNOUSERSITE = '1'
+    } else {
+        $found = Get-Command python -ErrorAction SilentlyContinue
+        if ($found) { $py = $found.Source }
+    }
     if (-not $py) {
         Write-Host "python not found - convert this session's stamps by hand:" -ForegroundColor Yellow
         Write-Host "  python tools\port_stamp.py --all --since $sessionStart --source $Source" -ForegroundColor Yellow
@@ -106,8 +115,8 @@ if ($Source) {
         Write-Host ""
         Write-Host "Converting stamps saved this session to your mod's ids (a minute or two)..."
         try {
-            & $py.Source "$tools\port_stamp.py" --all --since $sessionStart --source $Source
-            if ($LASTEXITCODE -eq 0) { & $py.Source "$tools\repack_art.py" }
+            & $py "$tools\port_stamp.py" --all --since $sessionStart --source $Source
+            if ($LASTEXITCODE -eq 0) { & $py "$tools\repack_art.py" }
         } catch {
             Write-Host "Stamp conversion failed: $_" -ForegroundColor Yellow
         }
