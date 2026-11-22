@@ -24,7 +24,7 @@ Drop one on the map and it is brought into your mod first, with new numbers, so 
 
 **File > Browse Maps** has the same Game list: pick a game to look through its maps, thumbnails and preview drawn with its own data. They are looked at, not opened, since their object numbers mean other pieces in your game; to work on one, start gecko on that game with `python foc.py browse`.
 
-It works with the [map workflow](#the-map-workflow) that comes with this build: run `python setup.py` in the `workflow` folder once and give it the folders of the other games you have. It finds the best-known total conversions by itself, and takes any other Fallout-engine game or mod (Et Tu, say) by its folder. gecko finds that folder by itself when it sits beside `gecko.exe`, as it does in the release zip (or set it in **File > Preferences > Mod Tools**).
+It works with the [map workflow](#the-map-workflow) that comes with this build: double-click `Set up other games.bat` beside `gecko.exe` once and give it the folders of the other games you have. It finds the best-known total conversions by itself, and takes any other Fallout-engine game or mod (Et Tu, say) by its folder. gecko finds the `workflow` folder by itself when it sits beside `gecko.exe`, as it does in the release zip (or set it in **File > Preferences > Mod Tools**).
 
 ### Stamps that come with it
 
@@ -129,7 +129,7 @@ The **Black Edge** tool lays Fallout 2's black map edge: click to start and at e
 
 ## The map workflow
 
-[`workflow/`](workflow/README.md) holds the whole toolkit I use to make Fallout 2 maps with this build: browsing the original games and the total conversions and saving their buildings as stamps, converted to your mod's numbers; planning a site to scale; building and finishing a map the way Fallout 2 does; putting it in the game. It needs Python 3.10 or newer and Fallout 2 with the Restoration Project Unofficial: open a terminal in `workflow`, run `python setup.py`, then `python foc.py`.
+[`workflow/`](workflow/README.md) holds the whole toolkit I use to make Fallout 2 maps with this build: browsing the original games and the total conversions and saving their buildings as stamps, converted to your mod's numbers; planning a site to scale; building and finishing a map the way Fallout 2 does; putting it in the game. It needs Fallout 2 with the Restoration Project Unofficial. The release zip brings its own Python with the packages the tools need, and gecko runs them with it: the Tools menu makes the working copy of Fallout 2 the first time it needs one, and `Set up other games.bat` adds the other games. Building gecko yourself, install Python 3.10 or newer, open a terminal in `workflow`, run `python setup.py`, then `python foc.py`.
 
 ## Building
 

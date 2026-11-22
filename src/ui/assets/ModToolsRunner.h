@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QJsonObject>
 #include <QObject>
 #include <QString>
@@ -11,6 +12,7 @@
 #include <vector>
 
 class QProcess;
+class QProcessEnvironment;
 
 namespace geck {
 
@@ -27,13 +29,24 @@ struct ModToolResult {
  * resized copies, names and examine text, and Apply New Art. The mod's rules (names, ids, the
  * registry, the deploy chain) all live on the Python side; this starts it and reads the answer.
  *
- * The mod folder and the Python to run it come from Preferences > Mod Tools.
+ * The mod folder and the Python to run it come from Preferences > Mod Tools; with no Python named
+ * there, the one that comes with gecko (python/ beside gecko.exe in the release zip).
  */
 class ModToolsRunner : public QObject {
     Q_OBJECT
 
 public:
     ModToolsRunner(std::filesystem::path root, QString python, QObject* parent = nullptr);
+
+    /// The Python that comes with gecko: python/python.exe in @p applicationDir (the release zip carries
+    /// one with the packages the tools need). Empty when there is none.
+    static QString bundledPython(const QString& applicationDir = QCoreApplication::applicationDirPath());
+    /// The Python the tools run with for a Preferences setting of @p configured. An empty setting or a bare
+    /// python / python.exe (whatever PATH finds first, which can be the Microsoft Store's: Windows hides the
+    /// new files that one writes under AppData from every other program, gecko included) means the one that
+    /// comes with gecko when there is one, else python from PATH. Any other setting is used as given.
+    static QString effectivePython(
+        const QString& configured, const QString& applicationDir = QCoreApplication::applicationDirPath());
 
     /// root/tools/gecko_assets.py
     static std::filesystem::path scriptFor(const std::filesystem::path& root);
@@ -47,10 +60,18 @@ public:
     /// the script, else the one found above gecko.exe, else empty.
     static std::filesystem::path resolveRoot(const std::filesystem::path& configured);
 
-    /// The folder the map workflow's deploy (Apply New Art) writes the mod into: <working copy>/mods/foc,
-    /// the working copy being config.json's "base" (a relative one is under @p root) or @p root/base.
+    /// The map workflow's working copy of the game: config.json's "base" (a relative one is under @p root)
+    /// or @p root/base. Empty when @p root is empty; the folder need not exist yet.
+    static std::filesystem::path workingCopyFolder(const std::filesystem::path& root);
+    /// The folder the map workflow's deploy (Apply New Art) writes the mod into: <working copy>/mods/foc.
     /// Empty when @p root is empty or nothing has been deployed yet.
     static std::filesystem::path deployedModFolder(const std::filesystem::path& root);
+    /// The data paths that read the game the way the working copy has it, lowest priority first: its
+    /// master.dat and critter.dat, the patch archives the game loads over them (patch000.dat, ...), the
+    /// mods in its mods/mods_order.txt (the Restoration Project first), its loose files, then the deployed
+    /// mod. Only those that exist. What `python foc.py edit` sets: kept in step with foc_data_paths in
+    /// workflow/tools/build_gecko_browsers.py. Empty when there is no working copy (no master.dat in it).
+    static std::vector<std::filesystem::path> workingCopyDataPaths(const std::filesystem::path& root);
     /// @p dataPaths with the deployed mod mounted last, on top of the game, so what Apply New Art put in
     /// (new pieces, roof tiles in spare tile lines) draws whichever game folder Preferences names.
     /// Unchanged when nothing is deployed, when a data path already mounts it (a profile that puts the
@@ -90,9 +111,15 @@ public:
     /// The Fallout 2 folder gecko itself loads (from its data paths), offered when the map workflow
     /// has no working copy yet and its own setup doesn't know one. Set once by the main window.
     static void setGameFolderHint(std::function<QString()> hint);
+    /// Called with the mod folder once a command that had to make the working copy first has answered,
+    /// so the main window can offer to read the game from it. Set once by the main window.
+    static void setWorkingCopyMadeHook(std::function<void(const std::filesystem::path&)> hook);
 
 private:
     QStringList scriptArguments(const QStringList& args) const;
+    /// The environment the tools' Python runs in: UTF-8 output, and with the Python that comes with gecko,
+    /// no user site-packages (another Python 3.13's pip install --user would shadow its own packages).
+    QProcessEnvironment pythonEnvironment() const;
     /// run() / runAndWait() without the offer to install missing packages.
     QProcess* runOnce(const QStringList& args, std::function<void(const ModToolResult&)> done);
     ModToolResult runOnceAndWait(const QStringList& args, int timeoutMs);
@@ -108,6 +135,7 @@ private:
 
     std::filesystem::path _root;
     QString _python;
+    bool _madeWorkingCopy = false; ///< offerToMakeWorkingCopy made it during the current command
 };
 
 } // namespace geck

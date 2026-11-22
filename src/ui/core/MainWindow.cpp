@@ -73,6 +73,8 @@
 #include <QLabel>
 #include <QCloseEvent>
 #include <QMessageBox>
+#include <QPointer>
+#include <QPushButton>
 #include <QKeyEvent>
 #include <QAction>
 #include <QActionGroup>
@@ -1644,6 +1646,54 @@ void MainWindow::rebuildResourcePanels() {
     }
 }
 
+void MainWindow::offerToReadWorkingCopy(const std::filesystem::path& root) {
+    if (!_settings || _settings->isBrowsingAnotherGame()) {
+        return; // a launcher has gecko on another game: its data paths go back when it closes
+    }
+    const std::vector<std::filesystem::path> paths = ModToolsRunner::workingCopyDataPaths(root);
+    if (paths.empty() || paths == _settings->getDataPaths()) {
+        return;
+    }
+
+    QMessageBox ask(this);
+    ask.setIcon(QMessageBox::Question);
+    ask.setWindowTitle("Working Copy of Fallout 2");
+    ask.setText("The working copy is made. gecko can read Fallout 2 from it from now on, the way your mod's game "
+                "has it: with the Restoration Project, and what Apply New Art deploys on top.");
+    ask.setInformativeText(QString("Its data paths replace the %1 in File > Preferences > General. Switching now "
+                                   "reloads the game data: the map is closed (you're asked to save any changes) and "
+                                   "opened again.")
+                               .arg(_settings->getDataPaths().size() == 1 ? "one" : "ones"));
+    QPushButton* now = ask.addButton("Switch Now", QMessageBox::AcceptRole);
+    QPushButton* later = ask.addButton("At Next Start", QMessageBox::ActionRole);
+    ask.addButton("Keep My Data Paths", QMessageBox::RejectRole);
+    ask.setDefaultButton(now);
+    ask.exec();
+    if (ask.clickedButton() != now && ask.clickedButton() != later) {
+        return;
+    }
+
+    _settings->setDataPaths(paths);
+    _settings->save();
+    spdlog::info("Data paths set to the mod tools' working copy ({} paths)", paths.size());
+    if (ask.clickedButton() == later) {
+        return;
+    }
+
+    std::string reopen;
+    if (hasActiveMap()) {
+        const std::filesystem::path path = _currentEditorWidget->getMap()->path();
+        std::error_code ec;
+        if (path.is_absolute() && std::filesystem::exists(path, ec)) {
+            reopen = QString::fromStdU16String(path.u16string()).toStdString(); // UTF-8, as File > Open passes it
+        }
+    }
+    rebuildGameResourcesFromSettings();
+    if (!reopen.empty() && !hasActiveMap()) {
+        handleMapLoadRequest(reopen, true);
+    }
+}
+
 void MainWindow::rebuildGameResourcesFromSettings() {
     // Rebuilding resources closes the current map, so honour the same unsaved-changes prompt as
     // New/Open/Quit. Cancelling keeps the map; the data-path change waits for the next rebuild.
@@ -3168,6 +3218,11 @@ void MainWindow::connectOtherGames() {
         consider(_settings->getGameDataDirectory());
         consider(_settings->getExecutableGameLocation().parent_path());
         return QString::fromStdU16String(best.u16string());
+    });
+    ModToolsRunner::setWorkingCopyMadeHook([window = QPointer<MainWindow>(this)](const std::filesystem::path& root) {
+        if (window) {
+            window->offerToReadWorkingCopy(root);
+        }
     });
     if (!_objectPalettePanel) {
         return;

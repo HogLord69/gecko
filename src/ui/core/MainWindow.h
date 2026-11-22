@@ -301,6 +301,9 @@ private:
     void replaceDockPanelWidget(QDockWidget* dock, QWidget* panel, QSizePolicy::Policy verticalPolicy);
     void rebuildResourcePanels();
     void rebuildGameResourcesFromSettings();
+    // Once the mod tools have made their working copy of the game (under @p root), offer to read the game
+    // from it: its data paths become gecko's (what `python foc.py edit` does), now or at the next start.
+    void offerToReadWorkingCopy(const std::filesystem::path& root);
 
     // The writable data path's maps/ folder (created if needed), used as the default save target; empty
     // when no writable Data Path is configured.
