@@ -22,6 +22,8 @@ The object palette has a **Game** list. Pick another game you have installed and
 
 Drop one on the map and it is brought into your mod first, with new numbers, so it works in your game and shows at once; **Tools > Apply New Art** puts it in the game. Dropping it again uses the same copy. Scenery, walls, misc pieces and items that have no inventory picture (desks, lockers, chests, keys) come across. Critters, weapons, armor, ammo and drugs are refused with the reason: their other numbers (AI packet, talking head, ammo, inventory picture) would point at the wrong things. A piece's script stays behind, since its number means another script in your game.
 
+**Custom**, right after your own game in the Game list, shows only your mod's own pieces: the ones made with the Tools menu and the ones brought in from other games, once **Tools > Apply New Art** has put them in. The base game's pieces, even ones your mod changed, are left out.
+
 **File > Browse Maps** has the same Game list: pick a game to look through its maps, thumbnails and preview drawn with its own data. They are looked at, not opened, since their object numbers mean other pieces in your game; to work on one, start gecko on that game with `python foc.py browse`.
 
 It works with the [map workflow](#the-map-workflow) that comes with this build: double-click `Set up other games.bat` beside `gecko.exe` once and give it the folders of the other games you have. It finds the best-known total conversions by itself, and takes any other Fallout-engine game or mod (Et Tu, say) by its folder. gecko finds the `workflow` folder by itself when it sits beside `gecko.exe`, as it does in the release zip (or set it in **File > Preferences > Mod Tools**).
@@ -49,6 +51,12 @@ The **Tools** menu makes new art for your mod with the [map workflow](#the-map-w
 ![Cut Building into Walls: a house render with the foot of its walls marked, and where it is cut](docs/hoglord/cut-building.png)
 
 **Tools > Cut Building into Walls** cuts a building rendered with the Fallout camera into wall pieces, one per hex, on the same screen columns as Fallout 2's own walls (32 and 16 pixels on a 14 degree wall, 16 on a 37 degree one). Click the foot of the walls; Shift-click the top of a wall, and the roof above it becomes roof tiles. A stamp lays the whole building down.
+
+### Floor and roof tiles from a picture
+
+**Tools > Make Tiles from Picture** turns a picture of a surface seen from straight above (a photo or a texture: dirt, floorboards, a tiled floor, shingles, a rug) into new floor or roof tiles. The picture is laid flat over a block of 1x1 to 4x4 squares at the game's angle and cut into one tile per square, and it is kept no brighter or more colourful than Fallout 2's own tiles (or keeps its own colours). **Make the edges repeat** blends the edges of a picture that doesn't repeat by itself, and **Even out the light** takes out a photo's uneven lighting, so the block meets its next copy without a seam. The preview lays a patch of the tiles beside the player. A stamp lays an 8x8 patch of the block on the floor or the roof, and each patch snaps to the block's own grid on the map, so patches meet; a single tile paints straight from the tile palette.
+
+Every new tile takes one line of `tiles.lst`, and the game reads a tile's number as 12 bits, so there are 4,096 lines in all and Fallout 2 with the Restoration Project uses 4,077. The free ones are the lines that only repeat another tile's picture and the 19 numbers past the list's end: about 320 for a new mod. The dialog says how many are left.
 
 ### Apply New Art
 

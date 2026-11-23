@@ -111,9 +111,12 @@ def art_lst(gi: GameIndex, art_dir: str) -> list[str]:
     base = base_art_lst(gi, art_dir)
     out = list(base) if not foc else _assemble(base, foc, FOC_START[key] - 1, FILLER["art"], key)
     if art_dir == "tiles":
-        # new tiles in spare lines of the base list (tools/tile_slots.py)
+        # new tiles in spare lines of the base list (tools/tile_slots.py), and past its end up to
+        # the 4096 ids a square can hold: the list is lengthened with the filler to reach them
         for tid, name in tile_slots().items():
-            if 0 <= tid < len(out):
+            if 0 <= tid < 4096:
+                if tid >= len(out):
+                    out += [FILLER["art"]] * (tid + 1 - len(out))
                 out[tid] = name
     return out
 

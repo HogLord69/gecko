@@ -37,6 +37,10 @@ struct PatternVariant {
     std::vector<PatternObject> objects;
     std::vector<PatternTile> floor;
     std::vector<PatternTile> roof;
+    /// The tiles are a block repeating every tileRepeat squares (Tools > Make Tiles from Picture):
+    /// stamping puts the anchor's tile on a multiple of it, so each stamped patch meets the last.
+    /// 1, the default, places the tiles wherever the anchor lands.
+    int tileRepeat = 1;
 };
 
 /// A reusable prefab captured from a selection, holding one or more orientation

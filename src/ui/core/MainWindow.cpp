@@ -37,6 +37,7 @@
 #include "ui/dialogs/PatternBrowserDialog.h"
 #include "ui/dialogs/AddSceneryDialog.h"
 #include "ui/dialogs/CutBuildingDialog.h"
+#include "ui/dialogs/MakeTilesDialog.h"
 #include "ui/assets/ModAssetAction.h"
 #include "ui/assets/ModToolsRunner.h"
 #include "ui/theme/ThemeManager.h"
@@ -789,6 +790,8 @@ void MainWindow::setupMenuBar() {
         QKeySequence(), "Turn a render or photo into a new scenery piece");
     addMenuAction(_toolsMenu, QString(), "Cut &Building into Walls...", &MainWindow::showCutBuildingDialog,
         QKeySequence(), "Cut a building render into wall pieces, one per hex, and a stamp that lays them down");
+    addMenuAction(_toolsMenu, QString(), "Make &Tiles from Picture...", &MainWindow::showMakeTilesDialog,
+        QKeySequence(), "Turn a top-down picture of a surface into new floor or roof tiles, and a stamp that lays a patch");
     addMenuAction(_toolsMenu, QString(), "&Apply New Art...", &MainWindow::applyNewArt, QKeySequence(),
         "Save the map, close gecko, deploy the mod with the new art, and open gecko again on this map");
     _toolsMenu->addSeparator();
@@ -2977,6 +2980,19 @@ void MainWindow::showCutBuildingDialog() {
     }
 }
 
+void MainWindow::showMakeTilesDialog() {
+    auto runner = makeModToolsRunner();
+    if (!runner) {
+        return;
+    }
+    MakeTilesDialog dialog(runner.get(), this);
+    dialog.exec();
+    if (dialog.tilesMade() > 0) {
+        showStatusMessage(QString("%1 new tile(s) made. Tools > Apply New Art puts them in the tile palette and the game.")
+                              .arg(dialog.tilesMade()));
+    }
+}
+
 void MainWindow::applyNewArt() {
     auto runner = makeModToolsRunner();
     if (!runner) {
@@ -3258,6 +3274,32 @@ void MainWindow::connectOtherGames() {
             }
             return data;
         });
+    _objectPalettePanel->setOwnPiecesProvider([this](QString* error) -> std::optional<std::map<QString, std::set<int>>> {
+        if (!modToolsConfigured()) {
+            *error = "Which pieces are your mod's own comes from its tools: set the mod folder in File > Preferences "
+                     "> Mod Tools.";
+            return std::nullopt;
+        }
+        if (_settings->isBrowsingAnotherGame()) {
+            *error = "gecko is open on another game, whose lists don't hold your mod's pieces.";
+            return std::nullopt;
+        }
+        ModToolsRunner runner(ModToolsRunner::resolveRoot(_settings->getModToolsRoot()), _settings->getPythonExecutable());
+        const ModToolResult result = runner.runAndWait({ "own-pieces" });
+        if (!result.ok) {
+            *error = "Your mod's tools didn't list its own pieces: " + result.error;
+            return std::nullopt;
+        }
+        std::map<QString, std::set<int>> pieces;
+        const QJsonObject folders = result.json.value("pieces").toObject();
+        for (auto it = folders.constBegin(); it != folders.constEnd(); ++it) {
+            auto& lines = pieces[it.key()];
+            for (const auto& line : it.value().toArray()) {
+                lines.insert(line.toInt());
+            }
+        }
+        return pieces;
+    });
 }
 
 std::optional<uint32_t> MainWindow::bringInFromOtherGame(const QString& source, uint32_t sourcePid) {

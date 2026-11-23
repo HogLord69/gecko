@@ -14,6 +14,8 @@ picture, mirrored and resized copies, names and examine text, and Apply New Art
     python tools/gecko_assets.py pending
     python tools/gecko_assets.py building-preview PICTURE --height PX [--line X,Y X,Y ...] --out PREVIEW.png
     python tools/gecko_assets.py building-create  PICTURE --height PX [--line ...] --prefix NAME --stamp STAMP
+    python tools/gecko_assets.py tiles-preview PICTURE --block N [--roof] [--repeat-edges] ... --out PREVIEW.png
+    python tools/gecko_assets.py tiles-create  PICTURE --block N [--roof] [...] --prefix NAME [--stamp STAMP]
     python tools/gecko_assets.py apply --wait-pid N --gecko GECKO.EXE [--map MAP] [--dry-run]
     python tools/gecko_assets.py sources                 (the games gecko's object palette can show)
     python tools/gecko_assets.py source NAME [--new]     (one game's data paths, as gecko mounts them;
@@ -427,7 +429,7 @@ def missing_packages() -> list[str]:
 # The working copy of Fallout 2 the tools read the game from and deploy into (the deployed layer's
 # game folder). The map workflow kit makes it with setup.py --build-base; without it most commands
 # can't run, and the answer says so (needs_base) so gecko can offer to make it.
-NO_BASE_NEEDED = {"info", "sources", "stamp-games", "pending"}
+NO_BASE_NEEDED = {"info", "sources", "stamp-games", "pending", "own-pieces"}
 
 
 def working_copy() -> Path:
@@ -590,6 +592,25 @@ def cmd_text(args) -> dict:
 
 def cmd_pending(_args) -> dict:
     return {"items": read_pending()}
+
+
+def cmd_own_pieces(_args) -> dict:
+    """The mod's own pieces, for the Custom entry of gecko's Game list: per proto folder, the 1-based
+    .lst lines its registry gives out (mod/ids/proto_*.txt, from the mod's start in each list, as
+    lists.proto_lst places them). A retired (blank) line is left out, and so are the base game's
+    pieces the mod only changed. A line past the end of the list gecko reads is a piece not in the
+    game yet: Apply New Art puts it there."""
+    from foclib import TYPE_NAME
+    from gen_ids import read_registry
+    from ids import FOC_START, PROTO_KEY
+    pieces: dict[str, list[int]] = {}
+    for t, key in PROTO_KEY.items():
+        name = TYPE_NAME[t]
+        if name == "tiles":
+            continue
+        start = FOC_START[key]
+        pieces[name] = [start + n for n, entry in enumerate(read_registry(IDS / f"{key}.txt")) if entry]
+    return {"pieces": pieces}
 
 
 # ------------------------------------------------------------------------------ other games
@@ -1097,6 +1118,49 @@ def cmd_building_create(args) -> dict:
     return {**summary, **out}
 
 
+def tiles(args):
+    """image_tiles.run with its refusals turned into ours: (it, gi, pal, tiles)."""
+    import image_tiles as it
+    try:
+        return it, *it.run(args.picture, args.block, args.roof, args.turn, args.repeat_edges, args.own_colours,
+                           args.even_light)
+    except it.Refused as e:
+        raise Refused(str(e))
+
+
+def cmd_tiles_preview(args) -> dict:
+    it, gi, pal, made = tiles(args)
+    result = it.preview(gi, pal, made, args.block, args.roof, args.out)
+    spare = len(it.ts.spare_slots())
+    prefix = args.prefix.strip().lower()
+    result.update(tiles=len(made), spare_tile_slots=spare, slots_problem=None, stamp_problem=None,
+                  name_problem=it.name_problem(prefix, len(made), it.sb.tile_names_taken(gi)) if prefix else None)
+    if len(made) > spare:
+        result["slots_problem"] = (f"The block needs {len(made)} tiles but only {spare} spare tile slots are left: "
+                                   f"make the block smaller.")
+    if args.stamp.strip():
+        try:
+            if it.stamp_path(args.stamp).exists():
+                result["stamp_problem"] = f"There is already a stamp called '{args.stamp.strip()}'."
+        except it.Refused as e:
+            result["stamp_problem"] = str(e)
+    return result
+
+
+def cmd_tiles_create(args) -> dict:
+    it, gi, pal, made = tiles(args)
+    try:
+        out = it.write(gi, made, args.block, args.roof, args.prefix.strip().lower(), args.stamp.strip(),
+                       f"from {args.picture.name} (gecko)")
+    except it.Refused as e:
+        raise Refused(str(e))
+    first, last = out["made"][0], out["made"][-1]
+    names = first["name"] if first is last else f"{first['name']}..{last['name']}"
+    add_pending({"pid": f"tile {first['tile']}", "name": names,
+                 "what": f"{len(out['made'])} {'roof' if args.roof else 'floor'} tile(s) from {args.picture.name}"})
+    return out
+
+
 # ------------------------------------------------------------------------------ apply
 
 def process_alive(pid: int) -> bool:
@@ -1411,6 +1475,7 @@ def main() -> int:
     p.add_argument("--title")
     p.add_argument("--text")
     sub.add_parser("pending")
+    sub.add_parser("own-pieces")
     sub.add_parser("sources")
     p = sub.add_parser("source")
     p.add_argument("name")
@@ -1437,6 +1502,20 @@ def main() -> int:
         p.add_argument("--rim", type=float, default=0.25)
         if name == "building-preview":
             p.add_argument("--out", type=Path, default=WORK / "building.png")
+    for name in ("tiles-preview", "tiles-create"):
+        p = sub.add_parser(name)
+        p.add_argument("picture", type=Path)
+        p.add_argument("--prefix", default="", required=name == "tiles-create",
+                       help="tile names PREFIX01.frm ..., 1 to 6 letters")
+        p.add_argument("--stamp", default="", help="the stamp's name in gecko's patterns\\Custom (none: no stamp)")
+        p.add_argument("--block", type=int, default=2, help="squares a side the picture covers")
+        p.add_argument("--roof", action="store_true")
+        p.add_argument("--turn", type=int, default=0, help="quarter turns clockwise")
+        p.add_argument("--repeat-edges", action="store_true")
+        p.add_argument("--even-light", action="store_true")
+        p.add_argument("--own-colours", action="store_true")
+        if name == "tiles-preview":
+            p.add_argument("--out", type=Path, default=WORK / "tiles.png")
     p = sub.add_parser("apply")
     p.add_argument("--wait-pid", type=int, default=0)
     p.add_argument("--gecko", default="")
@@ -1462,10 +1541,11 @@ def main() -> int:
 
     handlers = {"info": cmd_info, "suggest-name": cmd_suggest_name, "preview": cmd_preview,
                 "create": cmd_create, "mirror": cmd_mirror, "resize": cmd_resize,
-                "text": cmd_text, "pending": cmd_pending,
+                "text": cmd_text, "pending": cmd_pending, "own-pieces": cmd_own_pieces,
                 "sources": cmd_sources, "source": cmd_source, "port": cmd_port,
                 "stamp-games": cmd_stamp_games, "stamp-convert": cmd_stamp_convert,
-                "building-preview": cmd_building_preview, "building-create": cmd_building_create}
+                "building-preview": cmd_building_preview, "building-create": cmd_building_create,
+                "tiles-preview": cmd_tiles_preview, "tiles-create": cmd_tiles_create}
     missing = missing_packages() if args.cmd != "info" else []
     if missing:
         result = {"ok": False, "missing": missing, "python_path": sys.executable,

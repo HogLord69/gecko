@@ -131,6 +131,7 @@ Browse another game in gecko, save stamps, and convert them into your mod's id s
 | `gecko_assets.py` | What gecko's Tools menu runs to make new art: scenery from a picture, mirrored and resized copies, names and examine text, and Apply New Art (close gecko, deploy, reopen it on the same map). |
 | `image_scenery.py` | Turn a picture of an object on a white background (a render or a photo) into a new mod scenery piece shaded like Fallout 2's own pre-rendered art, with its own art and proto, and optionally a ground shadow object like the Pep G... |
 | `slice_building.py` | Cut a building render into Fallout wall pieces, one per hex, the way the original walls are cut, and its roof into roof tiles, each with its own art (and the walls their own protos), and write a gecko stamp that lays the whole... |
+| `image_tiles.py` | Make new floor or roof tiles from a top-down picture of a surface (a photo or a texture: dirt, floorboards, a tiled floor, shingles, a rug), and a gecko stamp that lays a patch of them. |
 | `mirror_scenery.py` | Add a left-right mirrored copy of a scenery object as a new mod piece: its own art and its own proto, the original left as it is. |
 | `scale_scenery.py` | Add a bigger (or smaller) copy of a scenery object as a new mod piece: its own art and its own proto, the original left as it is. |
 | `scenery_text.py` | Give protos their own name and examine text, from mod/ids/scenery_text.tsv (scenery on the Redwell maps) and mod/ids/proto_text.tsv (items, critters and scenery everywhere else). |

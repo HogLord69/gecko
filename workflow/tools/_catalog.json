@@ -374,6 +374,10 @@
         "what": "Cut a building render into Fallout wall pieces, one per hex, the way the original walls are cut, and its roof into roof tiles, each with its own art (and the walls their own protos), and write a gecko stamp that lays the whole..."
       },
       {
+        "tool": "image_tiles.py",
+        "what": "Make new floor or roof tiles from a top-down picture of a surface (a photo or a texture: dirt, floorboards, a tiled floor, shingles, a rug), and a gecko stamp that lays a patch of them."
+      },
+      {
         "tool": "mirror_scenery.py",
         "what": "Add a left-right mirrored copy of a scenery object as a new mod piece: its own art and its own proto, the original left as it is."
       },

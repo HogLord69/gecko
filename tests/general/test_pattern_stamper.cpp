@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <cstdlib>
 #include <vector>
 
 #include "editor/HexGeometry.h"
@@ -80,6 +81,36 @@ TEST_CASE("PatternStamper::plan keeps tiles aligned with objects at any click pa
         INFO("target " << target);
         CHECK(alignedPlan.tiles[0].tileIndex == objTile); // the floor tile still sits under the object
     }
+}
+
+TEST_CASE("PatternStamper::plan snaps a repeating block of tiles to the block's grid", "[pattern][stamper]") {
+    using namespace geck::hexgrid;
+    PatternVariant block;
+    block.anchorHex = 101 * WIDTH + 100; // square (50, 50)
+    block.tileRepeat = 3;
+    block.floor.push_back(PatternTile{ 0, 0, 4077 });
+    block.floor.push_back(PatternTile{ 1, -1, 4078 });
+
+    // anywhere it is stamped, the anchor's tile lands on a multiple of 3 (the nearest one), so
+    // the block's tile for a square is always the same one
+    for (int col = 60; col < 80; ++col) {
+        for (int row = 60; row < 80; ++row) {
+            const auto plan = PatternStamper::plan(block, row * WIDTH + col);
+            REQUIRE(plan.tiles.size() == 2);
+            const int tileCol = plan.tiles[0].tileIndex % HexagonGrid::TILE_GRID_WIDTH;
+            const int tileRow = plan.tiles[0].tileIndex / HexagonGrid::TILE_GRID_WIDTH;
+            INFO("hex col " << col << ", row " << row);
+            CHECK(tileCol % 3 == 0);
+            CHECK(tileRow % 3 == 0);
+            CHECK(std::abs(tileCol - col / 2) <= 2); // the hex parity snap, then the block's
+            CHECK(std::abs(tileRow - row / 2) <= 2);
+            CHECK(plan.tiles[1].tileIndex == plan.tiles[0].tileIndex - HexagonGrid::TILE_GRID_WIDTH + 1);
+        }
+    }
+
+    block.tileRepeat = 1; // as before: the tiles go where the anchor lands
+    const auto plain = PatternStamper::plan(block, 71 * WIDTH + 70);
+    CHECK(plain.tiles[0].tileIndex == 35 * HexagonGrid::TILE_GRID_WIDTH + 35);
 }
 
 TEST_CASE("PatternStamper::plan drops entries that fall off the grid", "[pattern][stamper]") {

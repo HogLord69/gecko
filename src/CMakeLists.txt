@@ -137,6 +137,8 @@ set(GECK_APP_SOURCES
     ui/dialogs/AddSceneryDialog.cpp
     ui/dialogs/CutBuildingDialog.h
     ui/dialogs/CutBuildingDialog.cpp
+    ui/dialogs/MakeTilesDialog.h
+    ui/dialogs/MakeTilesDialog.cpp
 
     # Mod tools (Tools menu): runs the mod's tools/gecko_assets.py
     ui/assets/ModAssetAction.h
