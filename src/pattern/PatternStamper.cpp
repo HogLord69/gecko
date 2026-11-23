@@ -56,8 +56,15 @@ PatternStamper::Plan PatternStamper::plan(const PatternVariant& variant, int tar
 
     // Tile offsets are relative to the anchor's tile, so a stamp re-anchors them on the
     // (snapped) target hex's tile. The tile grid is a plain square grid (no parity offset).
-    const int targetTileCol = targetCol / 2;
-    const int targetTileRow = targetRow / 2;
+    int targetTileCol = targetCol / 2;
+    int targetTileRow = targetRow / 2;
+    if (variant.tileRepeat > 1) {
+        // A block of tiles that repeats: the anchor's tile goes to the nearest multiple of the block on
+        // the map's own grid, so every patch of it lines up with the others.
+        const int n = variant.tileRepeat;
+        targetTileCol = (targetTileCol + n / 2) / n * n;
+        targetTileRow = (targetTileRow + n / 2) / n * n;
+    }
     const auto resolveTiles = [&](const std::vector<PatternTile>& src, bool isRoof) {
         for (const PatternTile& t : src) {
             const int col = targetTileCol + t.dxTile;

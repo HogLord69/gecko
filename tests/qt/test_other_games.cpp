@@ -7,6 +7,7 @@
 #include "pattern/PatternLibrary.h"
 #include "ui/assets/ModToolsRunner.h"
 #include "ui/Settings.h"
+#include "ui/dialogs/MakeTilesDialog.h"
 #include "ui/dialogs/MapBrowserDialog.h"
 #include "ui/dialogs/PatternBrowserDialog.h"
 
@@ -27,6 +28,8 @@
 #include <QListWidget>
 #include <QTreeView>
 #include <QComboBox>
+#include <QImage>
+#include <QLineEdit>
 #include <QTemporaryDir>
 
 #include <filesystem>
@@ -725,4 +728,31 @@ TEST_CASE("The Game list's Custom entry shows only the mod's own pieces of the m
 
     palette.setOwnPiecesProvider({}); // no tools: no entry
     CHECK(picker->findData(geck::ObjectPalettePanel::ownPiecesId()) < 0);
+}
+
+TEST_CASE("Make Tiles from Picture asks the tools for what its settings say", "[qt][othergames]") {
+    QTemporaryDir tmp;
+    REQUIRE(tmp.isValid());
+    const QString picture = QDir(tmp.path()).filePath("dirt.png");
+    QImage image(64, 48, QImage::Format_RGB32);
+    image.fill(QColor(150, 120, 80));
+    REQUIRE(image.save(picture));
+
+    geck::ModToolsRunner runner(std::filesystem::path(tmp.path().toStdU16String()), "python");
+    geck::MakeTilesDialog dialog(&runner);
+    dialog.loadPicture(picture);
+    CHECK(dialog.tileArguments() == QStringList{ picture, "--block", "2", "--turn", "0", "--stamp", "dirt" });
+
+    dialog.findChild<QComboBox*>("blockCombo")->setCurrentIndex(0);
+    dialog.findChild<QComboBox*>("layerCombo")->setCurrentIndex(1);
+    dialog.findChild<QComboBox*>("turnCombo")->setCurrentIndex(3);
+    dialog.findChild<QCheckBox*>("repeatCheck")->setChecked(true);
+    dialog.findChild<QCheckBox*>("evenCheck")->setChecked(true);
+    dialog.findChild<QCheckBox*>("falloutColoursCheck")->setChecked(false);
+    dialog.findChild<QLineEdit*>("prefixEdit")->setText("dirt");
+    dialog.findChild<QLineEdit*>("stampEdit")->clear();
+    CHECK(dialog.tileArguments()
+        == QStringList{ picture, "--block", "1", "--turn", "3", "--roof", "--repeat-edges", "--even-light",
+            "--own-colours", "--prefix", "dirt" });
+    CHECK(dialog.tilesMade() == 0);
 }

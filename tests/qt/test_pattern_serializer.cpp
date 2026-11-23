@@ -143,6 +143,29 @@ TEST_CASE("PatternSerializer parses a hand-written document", "[pattern]") {
     CHECK(v.roof.empty()); // omitted section defaults to empty
 }
 
+TEST_CASE("PatternSerializer keeps a block's tileRepeat, and leaves it out when it is 1", "[pattern]") {
+    Pattern p;
+    p.name = "dirt";
+    PatternVariant v;
+    v.anchorHex = 20300;
+    v.floor.push_back(PatternTile{ 0, 0, 4077 });
+    v.tileRepeat = 2;
+    p.variants.push_back(v);
+    v.tileRepeat = 1;
+    p.variants.push_back(v);
+
+    const QByteArray json = PatternSerializer::serialize(p);
+    CHECK(json.count("tileRepeat") == 1);
+    QString error;
+    const auto parsed = PatternSerializer::deserialize(json, &error);
+    INFO("error: " << error.toStdString());
+    REQUIRE(parsed.has_value());
+    REQUIRE(parsed->variants.size() == 2);
+    CHECK(parsed->variants[0].tileRepeat == 2);
+    CHECK(parsed->variants[1].tileRepeat == 1);
+    CHECK(parsed->variants[0].floor[0].tileId == 4077);
+}
+
 TEST_CASE("PatternSerializer rejects malformed and out-of-spec input", "[pattern]") {
     SECTION("invalid JSON") {
         checkRejected(QByteArray("{ not json"));
@@ -179,6 +202,9 @@ TEST_CASE("PatternSerializer rejects malformed and out-of-spec input", "[pattern
     }
     SECTION("a present-but-non-numeric direction is rejected, not defaulted") {
         checkRejected(variantDoc(R"("objects": [ { "dxHex": 0, "dyHex": 0, "proPid": 1, "frmPid": 2, "direction": "north" } ])"), "direction");
+    }
+    SECTION("a tileRepeat below 1 is rejected") {
+        checkRejected(variantDoc(R"("tileRepeat": 0)"), "tileRepeat");
     }
     SECTION("a direction outside 0..5 is rejected") {
         checkRejected(variantDoc(R"("objects": [ { "dxHex": 0, "dyHex": 0, "proPid": 1, "frmPid": 2, "direction": 6 } ])"), "direction");

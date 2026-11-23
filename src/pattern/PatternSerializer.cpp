@@ -53,6 +53,9 @@ namespace {
         json["objects"] = arrayToJson(variant.objects, objectToJson);
         json["floor"] = arrayToJson(variant.floor, tileToJson);
         json["roof"] = arrayToJson(variant.roof, tileToJson);
+        if (variant.tileRepeat > 1) {
+            json["tileRepeat"] = variant.tileRepeat;
+        }
         return json;
     }
 
@@ -191,6 +194,13 @@ namespace {
         }
         out.anchorHex = static_cast<int>(anchorHex);
         out.label = json.value(QStringLiteral("label")).toString().toStdString();
+        if (json.contains(QStringLiteral("tileRepeat"))) { // optional: 1 when absent
+            qint64 repeat = 1;
+            if (!checkInt(json.value(QStringLiteral("tileRepeat")), 1, 100, QStringLiteral("tileRepeat"), repeat, error)) {
+                return false;
+            }
+            out.tileRepeat = static_cast<int>(repeat);
+        }
 
         return parseArray(json, QStringLiteral("objects"), out.objects, parseObject, error)
             && parseArray(json, QStringLiteral("floor"), out.floor, parseTile, error)

@@ -9,10 +9,11 @@ hold nothing the mod can lose.
 WHY
 ---
 A map square stores a 12-bit tile id, so tiles.lst can never pass 4096 lines,
-and the base list already has 4077 (CLAUDE.md 4d). But not every line is a
-picture of its own: some repeat a tile that an earlier line already draws (one
-picture sits on 114 lines), and two have no art at all. Those lines are spare
-as long as nothing of the mod's points at them. A slot is taken when it is
+and the base list already has 4077 (CLAUDE.md 4d). The 19 ids past its end
+are spare. And not every line is a picture of its own: some repeat a tile
+that an earlier line already draws (one picture sits on 114 lines), and two
+have no art at all. Those lines are spare as long as nothing of the mod's points
+at them. A slot is taken when it is
   - the first line of its picture (that one stays), or ids 0 and 1;
   - used by a map in mod/data/maps or base/mods/foc/maps;
   - used by any stamp in gecko's patterns folder (a stamp made in the mod's
@@ -50,6 +51,10 @@ MAP_DIRS = (ROOT / "mod" / "data" / "maps", ROOT / "base" / "mods" / "foc" / "ma
 from foclib import config as _config  # noqa: E402
 PATTERNS = _config.patterns_dir()
 MAX_NAME = 12   # the engine keeps 12 characters of an art .lst name
+# A square keeps a tile id in 12 bits (map.cc _square_load, tile.cc: frmId & 0xFFF) and 0xFFF is
+# no sentinel, so ids 0 to 4095 can all be drawn; the engine takes a tiles.lst of any length
+# (art.cc artReadList), and the base's stops at 4077.
+TILE_IDS = 4096
 
 HEADER = ("# New floor and roof tiles in spare lines of the base tiles.lst (tools/tile_slots.py).\n"
           "# <tile id>,<file in art/tiles>. Never reorder or reuse a line: maps and stamps hold these ids.\n")
@@ -104,7 +109,8 @@ def _ids_in_stamps() -> set[int]:
 
 
 def spare_slots(gi: GameIndex | None = None) -> list[int]:
-    """The lines of the base tiles.lst that can take a new tile, lowest first."""
+    """The lines of the base tiles.lst that can take a new tile, lowest first, then the tile ids
+    past the list's end (lists.art_lst lengthens the list to reach them)."""
     gi = gi or GameIndex()                      # pristine base
     base = parse_lst(gi.vfs.read("art\\tiles\\tiles.lst"))
     seen: set[str] = set()
@@ -120,6 +126,7 @@ def spare_slots(gi: GameIndex | None = None) -> list[int]:
         if h in seen:
             spare.append(i)                     # a repeat of an earlier picture
         seen.add(h)
+    spare += range(len(base), TILE_IDS)         # no line yet: nothing can be drawn from them
     taken = set(read_slots()) | _ids_in_maps(GameIndex(pristine=False)) | _ids_in_stamps()
     return [i for i in spare if i not in taken]
 

@@ -185,6 +185,7 @@ private slots:
     std::unique_ptr<ModToolsRunner> makeModToolsRunner();
     void showAddSceneryDialog();
     void showCutBuildingDialog();
+    void showMakeTilesDialog();
     /// Save the map, start the deploy in its own console (it waits for gecko to exit and opens
     /// gecko again on the map), and close gecko.
     void applyNewArt();
