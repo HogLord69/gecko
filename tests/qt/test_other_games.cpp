@@ -30,7 +30,9 @@
 #include <QComboBox>
 #include <QImage>
 #include <QLineEdit>
+#include <QSpinBox>
 #include <QTemporaryDir>
+#include <QTest>
 
 #include <filesystem>
 #include <fstream>
@@ -741,18 +743,29 @@ TEST_CASE("Make Tiles from Picture asks the tools for what its settings say", "[
     geck::ModToolsRunner runner(std::filesystem::path(tmp.path().toStdU16String()), "python");
     geck::MakeTilesDialog dialog(&runner);
     dialog.loadPicture(picture);
-    CHECK(dialog.tileArguments() == QStringList{ picture, "--block", "2", "--turn", "0", "--stamp", "dirt" });
+    CHECK(dialog.tileArguments() == QStringList{ picture, "--block", "2", "--rotate", "0", "--stamp", "dirt" });
+
+    // the turn is typed in degrees, any of them, a minus number to the left; the arrows step 15
+    auto* turn = dialog.findChild<QSpinBox*>("turnSpin");
+    REQUIRE(turn != nullptr);
+    turn->selectAll();
+    QTest::keyClicks(turn, "37");
+    CHECK(dialog.tileArguments().mid(3, 2) == QStringList{ "--rotate", "37" });
+    turn->setValue(-45);
+    CHECK(dialog.tileArguments().mid(3, 2) == QStringList{ "--rotate", "-45" });
+    turn->stepUp();
+    CHECK(turn->value() == -30);
 
     dialog.findChild<QComboBox*>("blockCombo")->setCurrentIndex(0);
     dialog.findChild<QComboBox*>("layerCombo")->setCurrentIndex(1);
-    dialog.findChild<QComboBox*>("turnCombo")->setCurrentIndex(3);
+    turn->setValue(270);
     dialog.findChild<QCheckBox*>("repeatCheck")->setChecked(true);
     dialog.findChild<QCheckBox*>("evenCheck")->setChecked(true);
     dialog.findChild<QCheckBox*>("falloutColoursCheck")->setChecked(false);
     dialog.findChild<QLineEdit*>("prefixEdit")->setText("dirt");
     dialog.findChild<QLineEdit*>("stampEdit")->clear();
     CHECK(dialog.tileArguments()
-        == QStringList{ picture, "--block", "1", "--turn", "3", "--roof", "--repeat-edges", "--even-light",
+        == QStringList{ picture, "--block", "1", "--rotate", "270", "--roof", "--repeat-edges", "--even-light",
             "--own-colours", "--prefix", "dirt" });
     CHECK(dialog.tilesMade() == 0);
 }
