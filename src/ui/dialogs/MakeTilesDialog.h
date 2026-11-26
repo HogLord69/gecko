@@ -10,6 +10,7 @@ class QComboBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QSpinBox;
 class QTimer;
 
 namespace geck {
@@ -24,7 +25,7 @@ struct ModToolResult;
  * in the game's colours, each tile in a spare line of tiles.lst. A stamp in the patterns' Custom
  * folder lays a patch of the block; its tileRepeat snaps each patch to the block's grid.
  *
- * The left pane is the picture with the square that is used; the right pane is a patch of the
+ * The left pane is the picture, turned as it is laid, with the square that is used; the right pane is a patch of the
  * tiles as the game draws them, beside the player, and the same with each tile's square outlined.
  */
 class MakeTilesDialog : public QDialog {
@@ -73,7 +74,7 @@ private:
     QLabel* _problemLabel = nullptr;
     QComboBox* _blockCombo = nullptr;
     QComboBox* _layerCombo = nullptr;
-    QComboBox* _turnCombo = nullptr;
+    QSpinBox* _turnSpin = nullptr; ///< degrees clockwise
     QCheckBox* _repeatCheck = nullptr;
     QCheckBox* _evenCheck = nullptr;
     QCheckBox* _falloutColoursCheck = nullptr;

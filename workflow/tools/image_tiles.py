@@ -20,7 +20,9 @@ THE GRID (measured, not guessed)
 
 THE PICTURE
   It is seen from straight above. Its middle square is used (a picture that is not square loses
-  its long sides), --turn turns it, and it is laid over a block of --block x --block squares: its
+  its long sides), --rotate turns it clockwise by any number of degrees (a turn that is not a whole
+  quarter keeps the largest square that lies inside the turned picture, so no corner is empty), and
+  it is laid over a block of --block x --block squares: its
   x axis along the up-right edges, its y axis along the down-right ones, the picture's top-left
   corner at a square's left corner. Each tile pixel inside its square's parallelogram takes the
   picture's colour at that point, from the picture shrunk first to the screen's density (50 px a
@@ -83,6 +85,7 @@ PATCH = 8                       # the stamp's patch, in squares (rounded up to w
 PREVIEW_PATCH = 6
 EDGE_BAND = 0.25                # --repeat-edges: the share of each side that is blended
 WORK_SIZE = 768                 # the picture is cut down to this before the work (it ends at 200 px)
+TURN_MARGIN = 6                 # a turn that is not a quarter: px kept clear of the blurred corners
 MAX_NAME = ENGINE_ART_NAME_MAX
 
 # The base game's most used tiles (Fallout 2 + RPU, over its 176 maps), the colour references.
@@ -109,9 +112,21 @@ class Refused(Exception):
 
 # ------------------------------------------------------------------------------ the picture
 
-def square_picture(picture: Image.Image, turn: int) -> np.ndarray:
-    """The picture's middle square as float RGB, turned by `turn` quarters clockwise, at most
-    WORK_SIZE on a side."""
+def turned_side(side: float, degrees: float) -> float:
+    """The side of the largest upright square inside a square of `side` turned by `degrees`."""
+    r = np.radians(degrees)
+    return side / (abs(np.cos(r)) + abs(np.sin(r)))
+
+
+def square_picture(picture: Image.Image, degrees: float = 0.0) -> np.ndarray:
+    """The picture's middle square as float RGB, turned `degrees` clockwise, at most WORK_SIZE on a
+    side. A whole quarter turn keeps every pixel; any other keeps the largest square that lies
+    inside the turned one, so no corner is empty."""
+    if not np.isfinite(degrees):
+        raise Refused("The turn is a number of degrees.")
+    degrees = float(degrees) % 360.0
+    quarters = round(degrees / 90.0)
+    whole = abs(degrees - quarters * 90.0) < 1e-6
     if picture.mode in ("RGBA", "LA", "P"):
         rgba = picture.convert("RGBA")
         flat = Image.new("RGBA", rgba.size, (128, 128, 128, 255))
@@ -126,8 +141,15 @@ def square_picture(picture: Image.Image, turn: int) -> np.ndarray:
     rgb = rgb.crop((left, top, left + side, top + side))
     if side > WORK_SIZE:
         rgb = rgb.resize((WORK_SIZE, WORK_SIZE), Image.Resampling.LANCZOS)
-    a = np.asarray(rgb, np.float32)
-    return np.ascontiguousarray(np.rot90(a, -(turn % 4)))
+    if whole:
+        return np.ascontiguousarray(np.rot90(np.asarray(rgb, np.float32), -(quarters % 4)))
+    n = rgb.size[0]
+    rgb = rgb.rotate(-degrees, resample=Image.Resampling.BICUBIC)     # PIL turns anticlockwise
+    inner = int(turned_side(n, degrees)) - TURN_MARGIN                # clear of the blurred rim
+    if inner < 8:
+        raise Refused("The picture is too small to make a tile from.")
+    left = (n - inner) // 2
+    return np.asarray(rgb.crop((left, left, left + inner, left + inner)), np.float32)
 
 
 def repeat_edges(a: np.ndarray, band: float = EDGE_BAND) -> np.ndarray:
@@ -218,13 +240,13 @@ def cell_uv() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return mask, u, v
 
 
-def make_tiles(picture: Image.Image, block: int, pal: list, ref: np.ndarray | None, turn: int = 0,
+def make_tiles(picture: Image.Image, block: int, pal: list, ref: np.ndarray | None, rotate: float = 0.0,
                repeat: bool = False, even: bool = False) -> dict[tuple[int, int], np.ndarray]:
     """The block's tiles, {(column, row): 36x80 palette indices}."""
     import cv2
     if not 1 <= block <= MAX_BLOCK:
         raise Refused(f"The block is 1 to {MAX_BLOCK} squares a side.")
-    a = square_picture(picture, turn)
+    a = square_picture(picture, rotate)
     if even:
         a = even_light(a)           # first: the blend then joins evenly lit edges
     if repeat:
@@ -413,7 +435,8 @@ def write(gi: GameIndex, tiles: dict, block: int, roof: bool, prefix: str, stamp
 
 # ------------------------------------------------------------------------------ main
 
-def run(picture_path: Path, block: int, roof: bool, turn: int, repeat: bool, own_colours: bool, even: bool = False):
+def run(picture_path: Path, block: int, roof: bool, rotate: float, repeat: bool, own_colours: bool,
+        even: bool = False):
     """(gi, pal, tiles): the block's tiles made from the picture."""
     gi = GameIndex(pristine=False)
     pal = load_8bit_palette(gi)
@@ -423,7 +446,7 @@ def run(picture_path: Path, block: int, roof: bool, turn: int, repeat: bool, own
     except OSError as e:
         raise Refused(f"Couldn't read the picture: {e}")
     ref = None if own_colours else ref_lab(gi, np.array(pal, np.float32), ROOF_REFS if roof else FLOOR_REFS)
-    return gi, pal, make_tiles(picture, block, pal, ref, turn, repeat, even)
+    return gi, pal, make_tiles(picture, block, pal, ref, rotate, repeat, even)
 
 
 def main() -> int:
@@ -432,7 +455,8 @@ def main() -> int:
     ap.add_argument("prefix", help="tile names: PREFIX01.frm ... (1 to 6 letters)")
     ap.add_argument("--block", type=int, default=2, help=f"squares a side the picture covers, 1 to {MAX_BLOCK}")
     ap.add_argument("--roof", action="store_true", help="roof tiles: a roof colour reference and a roof stamp")
-    ap.add_argument("--turn", type=int, default=0, help="quarter turns clockwise")
+    ap.add_argument("--rotate", type=float, default=0.0,
+                    help="degrees clockwise, any number (a minus number turns it left)")
     ap.add_argument("--repeat-edges", action="store_true", help="blend the edges so the picture repeats")
     ap.add_argument("--even-light", action="store_true", help="even out a photo's uneven light")
     ap.add_argument("--own-colours", action="store_true", help="keep the picture's brightness and colour")
@@ -441,7 +465,7 @@ def main() -> int:
     ap.add_argument("--write", action="store_true")
     args = ap.parse_args()
     try:
-        gi, pal, tiles = run(args.picture, args.block, args.roof, args.turn, args.repeat_edges, args.own_colours,
+        gi, pal, tiles = run(args.picture, args.block, args.roof, args.rotate, args.repeat_edges, args.own_colours,
                              args.even_light)
         print(f"{len(tiles)} tiles, {len(ts.spare_slots())} spare tile slots")
         if args.preview:

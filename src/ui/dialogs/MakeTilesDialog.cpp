@@ -21,11 +21,15 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QRegularExpressionValidator>
+#include <QPainterPath>
 #include <QScrollArea>
+#include <QSpinBox>
 #include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <cmath>
+#include <numbers>
 
 namespace geck {
 
@@ -39,6 +43,12 @@ namespace {
 
     const QColor PANE_BACKGROUND(40, 36, 30);
     const QColor USED(240, 150, 40);
+
+    /// image_tiles.turned_side: the largest upright square inside a square of `side` turned by `degrees`.
+    double turnedSide(double side, int degrees) {
+        const double r = degrees * std::numbers::pi / 180.0;
+        return side / (std::abs(std::cos(r)) + std::abs(std::sin(r)));
+    }
 
 } // namespace
 
@@ -84,8 +94,8 @@ void MakeTilesDialog::setupUI() {
     _sourceLabel = new QLabel();
     _sourceLabel->setFixedSize(SOURCE_W, SOURCE_H);
     sourceLayout->addWidget(_sourceLabel);
-    auto* hint = new QLabel("The square in the middle (outlined) is used, laid flat on the ground: its top edge runs "
-                            "up-right on the screen and its left edge down-right.");
+    auto* hint = new QLabel("The picture as it is turned. The square in the middle (outlined) is used, laid flat on "
+                            "the ground: its top edge runs up-right on the screen and its left edge down-right.");
     hint->setWordWrap(true);
     hint->setMaximumWidth(SOURCE_W);
     sourceLayout->addWidget(hint);
@@ -159,13 +169,15 @@ void MakeTilesDialog::setupUI() {
                             "drawn 96 pixels up, over everything) and the layer the stamp fills.");
     shapeRow->addWidget(_layerCombo);
     shapeRow->addWidget(new QLabel("Turn:"));
-    _turnCombo = new QComboBox();
-    _turnCombo->setObjectName("turnCombo");
-    _turnCombo->addItem("As it is", 0);
-    _turnCombo->addItem("A quarter right", 1);
-    _turnCombo->addItem("Half round", 2);
-    _turnCombo->addItem("A quarter left", 3);
-    shapeRow->addWidget(_turnCombo);
+    _turnSpin = new QSpinBox();
+    _turnSpin->setObjectName("turnSpin");
+    _turnSpin->setRange(-360, 360);
+    _turnSpin->setSingleStep(15);
+    _turnSpin->setSuffix(QString::fromUtf8("°"));
+    _turnSpin->setToolTip("Degrees clockwise: type any number (a minus number turns it left), or step by 15 with the "
+                          "arrows. 90, 180 and 270 keep the whole square; any other turn uses the largest square "
+                          "inside the turned picture, and the picture no longer repeats by itself.");
+    shapeRow->addWidget(_turnSpin);
     shapeRow->addStretch();
     form->addRow("The picture covers:", shapeRow);
 
@@ -207,9 +219,13 @@ void MakeTilesDialog::setupUI() {
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     main->addWidget(buttons);
 
-    for (QComboBox* combo : { _blockCombo, _layerCombo, _turnCombo }) {
+    for (QComboBox* combo : { _blockCombo, _layerCombo }) {
         connect(combo, &QComboBox::currentIndexChanged, this, &MakeTilesDialog::schedulePreview);
     }
+    connect(_turnSpin, &QSpinBox::valueChanged, this, [this]() {
+        drawSourceView();
+        schedulePreview();
+    });
     for (QCheckBox* check : { _repeatCheck, _evenCheck, _falloutColoursCheck }) {
         connect(check, &QCheckBox::toggled, this, &MakeTilesDialog::schedulePreview);
     }
@@ -257,31 +273,44 @@ void MakeTilesDialog::drawSourceView() {
         _sourceLabel->setPixmap(canvas);
         return;
     }
-    const double scale = std::min({ double(SOURCE_W) / _picture.width(), double(SOURCE_H) / _picture.height(), 4.0 });
-    const QSize shown(std::max(1, int(_picture.width() * scale)), std::max(1, int(_picture.height() * scale)));
-    const QPoint offset((SOURCE_W - shown.width()) / 2, (SOURCE_H - shown.height()) / 2);
+    // The picture turned as image_tiles.py turns it, scaled so all of it fits the pane.
+    const int degrees = _turnSpin->value();
+    const double r = degrees * std::numbers::pi / 180.0;
+    const double c = std::abs(std::cos(r));
+    const double s = std::abs(std::sin(r));
+    const double w = _picture.width();
+    const double h = _picture.height();
+    const double scale = std::min({ SOURCE_W / (w * c + h * s), SOURCE_H / (w * s + h * c), 4.0 });
+    const QPointF centre(SOURCE_W / 2.0, SOURCE_H / 2.0);
 
     QPainter painter(&canvas);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    painter.drawImage(QRect(offset, shown), _picture);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.save();
+    painter.translate(centre);
+    painter.rotate(degrees); // clockwise on the screen, as --rotate
+    painter.scale(scale, scale);
+    painter.drawImage(QRectF(-w / 2, -h / 2, w, h), _picture);
+    painter.restore();
 
-    // the middle square is what image_tiles.py uses; the rest is dimmed
-    const int side = std::min(shown.width(), shown.height());
-    const QRect used(offset.x() + (shown.width() - side) / 2, offset.y() + (shown.height() - side) / 2, side, side);
-    const QColor dim(0, 0, 0, 150);
-    painter.fillRect(QRect(offset.x(), offset.y(), used.left() - offset.x(), shown.height()), dim);
-    painter.fillRect(QRect(used.right() + 1, offset.y(), offset.x() + shown.width() - used.right() - 1, shown.height()), dim);
-    painter.fillRect(QRect(used.left(), offset.y(), side, used.top() - offset.y()), dim);
-    painter.fillRect(QRect(used.left(), used.bottom() + 1, side, offset.y() + shown.height() - used.bottom() - 1), dim);
+    // What image_tiles.py uses: the middle square, or the largest upright square inside it once
+    // turned by an angle that isn't a quarter. The rest is dimmed.
+    const double side = turnedSide(std::min(w, h) * scale, degrees % 90 == 0 ? 0 : degrees);
+    const QRectF used(centre.x() - side / 2, centre.y() - side / 2, side, side);
+    QPainterPath outside;
+    outside.setFillRule(Qt::OddEvenFill);
+    outside.addRect(QRectF(canvas.rect()));
+    outside.addRect(used);
+    painter.fillPath(outside, QColor(0, 0, 0, 150));
     painter.setPen(QPen(USED, 1.5, Qt::DashLine));
-    painter.drawRect(used.adjusted(0, 0, -1, -1));
+    painter.drawRect(used.adjusted(0.5, 0.5, -0.5, -0.5));
     painter.end();
     _sourceLabel->setPixmap(canvas);
 }
 
 QStringList MakeTilesDialog::tileArguments() const {
-    QStringList args{ _picturePath, "--block", QString::number(_blockCombo->currentData().toInt()), "--turn",
-        QString::number(_turnCombo->currentData().toInt()) };
+    QStringList args{ _picturePath, "--block", QString::number(_blockCombo->currentData().toInt()), "--rotate",
+        QString::number(_turnSpin->value()) };
     if (_layerCombo->currentData().toString() == "roof") {
         args << "--roof";
     }
@@ -348,11 +377,16 @@ void MakeTilesDialog::showPreview(const ModToolResult& result) {
 
     const int tiles = result.json.value("tiles").toInt();
     _infoLabel->setStyleSheet(ui::theme::styles::statusInfo());
-    _infoLabel->setText(QString("%1 %2 tile%3; %4 spare tile slots are left (each new tile takes one).")
-                            .arg(tiles)
-                            .arg(_layerCombo->currentData().toString())
-                            .arg(tiles == 1 ? "" : "s")
-                            .arg(result.json.value("spare_tile_slots").toInt()));
+    QString info = QString("%1 %2 tile%3; %4 spare tile slots are left (each new tile takes one).")
+                       .arg(tiles)
+                       .arg(_layerCombo->currentData().toString())
+                       .arg(tiles == 1 ? "" : "s")
+                       .arg(result.json.value("spare_tile_slots").toInt());
+    if (_turnSpin->value() % 90 != 0 && !_repeatCheck->isChecked()) {
+        info += " Turned by an angle, the picture no longer repeats by itself: Make the edges repeat joins the "
+                "blocks without a seam.";
+    }
+    _infoLabel->setText(info);
 
     QStringList problems;
     for (const char* key : { "name_problem", "slots_problem", "stamp_problem" }) {

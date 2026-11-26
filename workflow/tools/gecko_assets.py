@@ -1122,7 +1122,7 @@ def tiles(args):
     """image_tiles.run with its refusals turned into ours: (it, gi, pal, tiles)."""
     import image_tiles as it
     try:
-        return it, *it.run(args.picture, args.block, args.roof, args.turn, args.repeat_edges, args.own_colours,
+        return it, *it.run(args.picture, args.block, args.roof, args.rotate, args.repeat_edges, args.own_colours,
                            args.even_light)
     except it.Refused as e:
         raise Refused(str(e))
@@ -1510,7 +1510,7 @@ def main() -> int:
         p.add_argument("--stamp", default="", help="the stamp's name in gecko's patterns\\Custom (none: no stamp)")
         p.add_argument("--block", type=int, default=2, help="squares a side the picture covers")
         p.add_argument("--roof", action="store_true")
-        p.add_argument("--turn", type=int, default=0, help="quarter turns clockwise")
+        p.add_argument("--rotate", type=float, default=0.0, help="degrees clockwise, any number")
         p.add_argument("--repeat-edges", action="store_true")
         p.add_argument("--even-light", action="store_true")
         p.add_argument("--own-colours", action="store_true")
