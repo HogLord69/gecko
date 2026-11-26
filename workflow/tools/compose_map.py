@@ -62,6 +62,7 @@ AUTHORED = ROOT / "mod" / "data" / "maps"
 DEPLOYED = ROOT / "base" / "mods" / "foc" / "maps"
 IDS_H = ROOT / "scripts_src" / "foc" / "foc_ids.h"
 EXIT_GRID = 0x05000010
+WORLD_EXIT_FID = 0x05000021         # ext2grd1, the brown twin of the exit grid's own picture (tools/exit_fix.py --colours)
 BLOCKING_HEX = 0x02000043                  # scenery 67, Secret Blocking Hex
 SCROLL_BLOCKER = 0x0500000C
 from foclib import config as _config  # noqa: E402
@@ -488,7 +489,8 @@ class Composer:
                 sq = (hy // 2) * 100 + hx // 2
                 if self.mb.floors[de][sq] <= 1:
                     continue
-                self.add(EXIT_GRID, pr.fid, hy * HEX_W + hx, de,
+                # brown to the world map, green to the next map of the place: Fallout 2 draws every world exit brown
+                self.add(EXIT_GRID, WORLD_EXIT_FID if ex["to"] < 0 else pr.fid, hy * HEX_W + hx, de,
                          extras=(ex["to"], ex.get("tile", -1), ex.get("elev", 0), ex.get("rot", 0)))
                 placed += 1
             print(f"  exits to {ex['to']}: {placed} hexes")
